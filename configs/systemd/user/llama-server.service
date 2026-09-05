@@ -1,0 +1,34 @@
+# ~/.config/systemd/user/llama-server.service
+# llama.cpp server on 127.0.0.1:8080 — OpenAI-compatible backend for pi "llama-local".
+# Binary: llama.cpp b10819 (see docs/INSTALL-POINTERS.md). Weights: see docs/GGUF.md.
+#
+# Overrides go in ~/.config/llama-server/env (not committed; may contain nothing secret,
+# but model paths are machine-specific):
+#   LLAMA_SERVER=/path/to/llama-server
+#   LLAMA_MODEL=/path/to/model.gguf
+#   LLAMA_EXTRA_ARGS="-c 32768 -ngl 0 -t 8"
+#
+# Enable: systemctl --user daemon-reload && systemctl --user enable --now llama-server.service
+# Check:  curl -s http://127.0.0.1:8080/health
+
+[Unit]
+Description=llama.cpp server (local OpenAI-compatible API for pi llama-local)
+Documentation=https://github.com/ggml-org/llama.cpp
+After=default.target
+
+[Service]
+Type=simple
+Environment=LLAMA_SERVER=%h/.local/bin/llama-server
+Environment=LLAMA_HOST=127.0.0.1
+Environment=LLAMA_PORT=8080
+Environment=LLAMA_MODEL=%h/.local/share/models/model.gguf
+Environment=LLAMA_ALIAS=local
+Environment=LLAMA_EXTRA_ARGS=
+EnvironmentFile=-%h/.config/llama-server/env
+ExecStart=/bin/sh -c 'exec "$LLAMA_SERVER" --host "$LLAMA_HOST" --port "$LLAMA_PORT" -m "$LLAMA_MODEL" --alias "$LLAMA_ALIAS" $LLAMA_EXTRA_ARGS'
+Restart=on-failure
+RestartSec=3
+Nice=5
+
+[Install]
+WantedBy=default.target
