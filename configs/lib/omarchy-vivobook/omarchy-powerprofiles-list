@@ -1,0 +1,52 @@
+#!/bin/bash
+# Vivobook: expose synthetic performance + full-speed alongside real PPD profiles.
+set -euo pipefail
+REAL=/usr/bin/omarchy-powerprofiles-list
+if [[ -n "${OMARCHY_POWERPROFILES_STATE_DIR:-}" ]]; then
+  STATE_DIR="$OMARCHY_POWERPROFILES_STATE_DIR"
+elif [[ -d /home/hurly/.local/state/omarchy/powerprofiles ]]; then
+  STATE_DIR=/home/hurly/.local/state/omarchy/powerprofiles
+else
+  STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/powerprofiles"
+fi
+MODE_FILE="$STATE_DIR/vivobook-mode"
+
+active_state=0
+[[ "${1:-}" == "--active-state" ]] && active_state=1
+
+mapfile -t real_lines < <("$REAL" ${active_state:+--active-state} 2>/dev/null || true)
+real_names=()
+ppd_active=""
+for line in "${real_lines[@]}"; do
+  [[ -z "$line" ]] && continue
+  name=${line%%$'\t'*}
+  real_names+=("$name")
+  if [[ $active_state -eq 1 ]]; then
+    rest=${line#*$'\t'}
+    [[ "$rest" == "1" ]] && ppd_active="$name"
+  fi
+done
+
+extras=(performance full-speed)
+vb_active=""
+[[ -r "$MODE_FILE" ]] && vb_active=$(tr -d '\r\n' <"$MODE_FILE")
+case "$vb_active" in
+  power-saver|balanced|performance|full-speed) ;;
+  *) vb_active=${ppd_active:-balanced} ;;
+esac
+
+emit() {
+  local name=$1
+  if [[ $active_state -eq 1 ]]; then
+    if [[ "$name" == "$vb_active" ]]; then printf '%s\t1\n' "$name"; else printf '%s\t0\n' "$name"; fi
+  else
+    printf '%s\n' "$name"
+  fi
+}
+
+seen=""
+for name in "${real_names[@]}" "${extras[@]}"; do
+  case " $seen " in *" $name "*) continue ;; esac
+  seen+=" $name"
+  emit "$name"
+done

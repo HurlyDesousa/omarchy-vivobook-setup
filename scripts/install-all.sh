@@ -270,6 +270,36 @@ main() {
   fi
   echo
 
+  # 7c. Vivobook powerprofiles wrappers + power panel QML overlay
+  info "=== Vivobook powerprofiles ==="
+  VIVOBOOK_LIB="${HOME}/.local/lib/omarchy-vivobook"
+  mkdir -p "${VIVOBOOK_LIB}"
+  for script in omarchy-powerprofiles-list omarchy-powerprofiles-set; do
+    apply_fragment \
+      "${CONFIGS_DIR}/lib/omarchy-vivobook/${script}" \
+      "${VIVOBOOK_LIB}/${script}" \
+      "vivobook ${script}"
+    chmod +x "${VIVOBOOK_LIB}/${script}" 2>/dev/null || true
+  done
+  ensure_state_dir "${HOME}/.local/state/omarchy/powerprofiles"
+
+  PP_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-powerprofiles.hook"
+  if [[ -x "${PP_HOOK}" ]]; then
+    info "Running restore-vivobook-powerprofiles.hook…"
+    "${PP_HOOK}" || warn "restore-vivobook-powerprofiles.hook failed (may need omarchy base install or sudo for /usr/share/omarchy/bin)"
+  else
+    warn "restore-vivobook-powerprofiles.hook not installed yet — re-run after hooks section"
+  fi
+
+  PANEL_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-power-panel.hook"
+  if [[ -x "${PANEL_HOOK}" ]]; then
+    info "Running restore-vivobook-power-panel.hook…"
+    "${PANEL_HOOK}" || warn "restore-vivobook-power-panel.hook failed (sudo may be required for /usr/share/omarchy/shell/plugins/panels/power/)"
+  else
+    warn "restore-vivobook-power-panel.hook not installed yet — re-run after hooks section"
+  fi
+  echo
+
   # 8. x1e-ec-tool reminder
   info "=== x1e-ec-tool ==="
   if [[ -x "${HOME}/src/x1e-ec-tool/install.sh" ]]; then

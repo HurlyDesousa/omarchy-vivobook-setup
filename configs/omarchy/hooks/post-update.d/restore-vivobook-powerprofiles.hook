@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+LIB=/home/hurly/.local/lib/omarchy-vivobook
+SHARE_BIN=/usr/share/omarchy/bin
+[[ -x "$LIB/omarchy-powerprofiles-list" && -x "$LIB/omarchy-powerprofiles-set" ]] || exit 0
+ln -sfn "$LIB/omarchy-powerprofiles-list" "$SHARE_BIN/omarchy-powerprofiles-list"
+ln -sfn "$LIB/omarchy-powerprofiles-set" "$SHARE_BIN/omarchy-powerprofiles-set"
