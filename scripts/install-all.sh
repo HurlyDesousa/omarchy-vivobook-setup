@@ -222,10 +222,46 @@ main() {
   else
     warn "No configs/quickshell/idle.patch — TODO: INVENTORY"
   fi
+
+  if [[ -f "${CONFIGS_DIR}/quickshell/lock-lidharden.patch" ]]; then
+    QS_LOCK_TARGET="/usr/share/omarchy/shell/plugins/lock/Service.qml"
+    if grep -q '^# Quickshell lock lid-harden patch (placeholder)' "${CONFIGS_DIR}/quickshell/lock-lidharden.patch" 2>/dev/null; then
+      warn "lock-lidharden.patch is still a placeholder — TODO: INVENTORY"
+    elif [[ -w "$(dirname "${QS_LOCK_TARGET}")" ]] && [[ -f "${QS_LOCK_TARGET}" ]]; then
+      apply_patch_if_present \
+        "${CONFIGS_DIR}/quickshell/lock-lidharden.patch" \
+        "${QS_LOCK_TARGET}" \
+        "quickshell lock lid-harden"
+    else
+      warn "lock-lidharden target ${QS_LOCK_TARGET} not writable — apply via restore-lock-lidharden.hook after omarchy update (may need sudo)"
+    fi
+  else
+    warn "No configs/quickshell/lock-lidharden.patch — TODO: INVENTORY"
+  fi
+  echo
+
+  # 7b. Omarchy post-update hooks (re-apply patches after omarchy updates)
+  info "=== Omarchy post-update hooks ==="
+  if [[ -d "${CONFIGS_DIR}/omarchy/hooks/post-update.d" ]]; then
+    mkdir -p "${HOME}/.config/omarchy/hooks/post-update.d"
+    for hook in "${CONFIGS_DIR}"/omarchy/hooks/post-update.d/*; do
+      [[ -f "${hook}" ]] || continue
+      dest="${HOME}/.config/omarchy/hooks/post-update.d/$(basename "${hook}")"
+      apply_fragment "${hook}" "${dest}" "omarchy hook $(basename "${hook}")"
+      chmod +x "${dest}" 2>/dev/null || true
+    done
+  else
+    warn "No configs/omarchy/hooks/post-update.d/ yet — TODO: INVENTORY"
+  fi
   echo
 
   # 8. x1e-ec-tool reminder
   info "=== x1e-ec-tool ==="
+  if [[ -x "${HOME}/src/x1e-ec-tool/install.sh" ]]; then
+    ok "x1e-ec-tool install script: ${HOME}/src/x1e-ec-tool/install.sh"
+  else
+    warn "x1e-ec-tool not at ~/src/x1e-ec-tool/install.sh — clone/build per docs/INSTALL-POINTERS.md"
+  fi
   if systemctl is-active --quiet x1e-ec-tool.service 2>/dev/null; then
     ok "x1e-ec-tool.service is active (do not stop)"
   else
@@ -270,7 +306,7 @@ main() {
   echo "    [ ] pi ~/.pi auth (NEVER commit)"
   echo "    [ ] Grok CLI auth"
   echo "    [ ] GGUF model: ./scripts/fetch-gguf.sh"
-  echo "    [ ] llama-server :8080"
+    echo "    [ ] omarchy-llama-server :8080"
   echo
   info "Full checklist: ${REPO_ROOT}/docs/SECRETS.md"
   echo

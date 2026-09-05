@@ -1,0 +1,18 @@
+# ~/.config/systemd/user/battery-idle-suspend.service
+# TODO: paste verbatim from AsusLaptop (~/.config/systemd/user/battery-idle-suspend.service)
+#
+# Expected: battery idle suspend script (path TBD — confirm on AsusLaptop)
+#
+# Enable: systemctl --user daemon-reload && systemctl --user enable --now battery-idle-suspend.service
+
+[Unit]
+Description=Battery idle suspend (TODO: paste verbatim from AsusLaptop)
+
+[Service]
+Type=simple
+# TODO: paste verbatim ExecStart from AsusLaptop
+# Expected: battery suspend script (confirm live path on AsusLaptop)
+ExecStart=/bin/sh -c 'echo "STUB: paste verbatim ExecStart from AsusLaptop — battery idle suspend script" >&2; exit 1'
+
+[Install]
+WantedBy=default.target

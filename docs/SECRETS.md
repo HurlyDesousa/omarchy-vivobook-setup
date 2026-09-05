@@ -13,7 +13,7 @@ Work through this checklist in order:
 - [ ] **GitHub / git credentials** — SSH keys or credential helper for private forks
 - [ ] **mise** — `mise install` for tool versions if `~/.config/mise` was not restored from backup
 - [ ] **GGUF model** — run `./scripts/fetch-gguf.sh` (see [GGUF.md](GGUF.md)); weights are not in git
-- [ ] **llama-server** — confirm `:8080` is reachable after pi/llama-local setup
+- [ ] **omarchy-llama-server** — confirm `:8080` is reachable after pi/llama-local setup
 - [ ] **Wi-Fi / VPN** — NetworkManager connections if not in system backup
 
 ## Explicitly excluded from this repo

@@ -26,7 +26,7 @@ git clone https://github.com/HurlyDesousa/omarchy-task-manager.git
 
 - `~/.config/omarchy/plugins/` — enabled plugins
 - `~/.local/state/omarchy/task-manager/`
-- `~/.local/state/omarchy/kbd-backlight/` (`hex`, `enabled`, `autostart`, `auto_off`)
+- `~/.local/state/omarchy/kbd-backlight` (JSON file: `hex`, `enabled`, `autostart`, `auto_off`)
 
 ---
 
@@ -59,6 +59,7 @@ git clone https://github.com/HurlyDesousa/linux-aarch64-vivobook.git
 Fan control and keyboard RGB on Snapdragon X Elite laptops via the embedded controller.
 
 - System service: `x1e-ec-tool.service`
+- **Live install:** `~/src/x1e-ec-tool/install.sh`
 - **Do not stop** this service — thermal and backlight depend on it
 
 ### Omarchy (upstream)

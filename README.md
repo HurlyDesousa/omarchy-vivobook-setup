@@ -71,7 +71,7 @@ Until the inventory merge, these are the documented targets. Placeholder configs
 | Path | Contents |
 |------|----------|
 | `~/.local/state/omarchy/task-manager/` | Task manager persisted state |
-| `~/.local/state/omarchy/kbd-backlight/` | `hex`, `enabled`, `autostart`, `auto_off` |
+| `~/.local/state/omarchy/kbd-backlight` | JSON file: `hex`, `enabled`, `autostart`, `auto_off`, `brightness` |
 
 ### Idle policy
 
@@ -88,7 +88,7 @@ Until the inventory merge, these are the documented targets. Placeholder configs
 | Tool | Notes |
 |------|-------|
 | `pi` | `llama-local` backend |
-| `llama-server` | listens on `:8080` |
+| `omarchy-llama-server` | listens on `:8080` (user unit `omarchy-llama-server.service`) |
 | `grok` | Grok CLI |
 | `cursor` | `~/.local/bin/cursor` |
 

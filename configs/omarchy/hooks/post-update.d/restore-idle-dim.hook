@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Omarchy post-update hook: re-apply Quickshell idle dim policy patch.
+# TODO: paste verbatim from AsusLaptop (~/.config/omarchy/hooks/post-update.d/restore-idle-dim.hook)
+#
+# Patch:  <repo>/configs/quickshell/idle.patch
+# Target: ~/.config/quickshell/idle.qml  (confirm live path on AsusLaptop)
+#
+# Stub — install-all.sh copies this to ~/.config/omarchy/hooks/post-update.d/
+
+set -euo pipefail
+
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+PATCH="${REPO_ROOT}/configs/quickshell/idle.patch"
+TARGET="${HOME}/.config/quickshell/idle.qml"
+
+if [[ ! -f "${PATCH}" ]]; then
+  echo "restore-idle-dim.hook: missing ${PATCH} — TODO: INVENTORY" >&2
+  exit 0
+fi
+
+if [[ ! -f "${TARGET}" ]]; then
+  echo "restore-idle-dim.hook: target missing ${TARGET} — skip" >&2
+  exit 0
+fi
+
+if patch --dry-run -R -p1 -d "$(dirname "${TARGET}")" < "${PATCH}" >/dev/null 2>&1; then
+  exit 0
+fi
+
+# TODO: paste verbatim re-apply logic from AsusLaptop
+patch -p1 -d "$(dirname "${TARGET}")" < "${PATCH}" || {
+  echo "restore-idle-dim.hook: patch failed — resolve manually" >&2
+  exit 1
+}

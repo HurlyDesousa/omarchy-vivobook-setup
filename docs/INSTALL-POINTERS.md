@@ -57,7 +57,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)" --
 install -Dm755 build/bin/llama-server ~/.local/bin/llama-server
 ```
 
-`llama-server` listens on `127.0.0.1:8080` via `configs/systemd/user/llama-server.service`; the served model alias is `local` (what `configs/pi/models.json` expects). Weights: `docs/GGUF.md`.
+`omarchy-llama-server` listens on `127.0.0.1:8080` via `configs/systemd/user/omarchy-llama-server.service` (stub — paste verbatim ExecStart from AsusLaptop); the served model alias is `local` (what `configs/pi/models.json` expects). Weights: `docs/GGUF.md`.
 
 ## x1e-ec-tool @ `ce572b3`
 
@@ -65,9 +65,18 @@ Fan control and keyboard RGB on Snapdragon X Elite laptops through the embedded 
 
 Commit `ce572b3` is the checkout that was live on the laptop. It does not resolve on the public upstream fetched during this inventory, so it is either a local/private commit or a fork; confirm the remote with `git -C <checkout> remote -v` on the laptop before relying on it. Upstream reference: [x1e-ec-tool](https://github.com/artem-senatorov/x1e-ec-tool).
 
+**Live install path on AsusLaptop:**
+
 ```bash
-git clone <x1e-ec-tool remote> && cd x1e-ec-tool && git checkout ce572b3
-# build/install per that repo's README, then:
+~/src/x1e-ec-tool/install.sh
+```
+
+Manual clone/build (if not already at `~/src/x1e-ec-tool`):
+
+```bash
+git clone <x1e-ec-tool remote> ~/src/x1e-ec-tool && cd ~/src/x1e-ec-tool && git checkout ce572b3
+~/src/x1e-ec-tool/install.sh
+# then:
 sudo systemctl enable --now x1e-ec-tool.service
 sudo usermod -aG i2c hurly   # kbd-backlight and fan profiles call the tool without sudo
 ```
@@ -90,7 +99,7 @@ Config lives in `~/.pi/agent/`:
 Smoke test:
 
 ```bash
-systemctl --user start llama-server.service
+systemctl --user start omarchy-llama-server.service
 curl -s http://127.0.0.1:8080/v1/models
 pi --model llama-local/local -p 'say hi'
 ```

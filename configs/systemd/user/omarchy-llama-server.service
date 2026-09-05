@@ -1,0 +1,19 @@
+# ~/.config/systemd/user/omarchy-llama-server.service
+# TODO: paste verbatim from AsusLaptop (~/.config/systemd/user/omarchy-llama-server.service)
+#
+# Expected wrapper binary: ~/.local/bin/omarchy-llama-server
+# (llama.cpp server on 127.0.0.1:8080 for pi llama-local — see docs/GGUF.md)
+#
+# Enable: systemctl --user daemon-reload && systemctl --user enable --now omarchy-llama-server.service
+
+[Unit]
+Description=omarchy llama-server wrapper (TODO: paste verbatim from AsusLaptop)
+
+[Service]
+Type=simple
+# TODO: paste verbatim ExecStart from AsusLaptop
+# Expected: %h/.local/bin/omarchy-llama-server
+ExecStart=/bin/sh -c 'echo "STUB: paste verbatim ExecStart from AsusLaptop — expected ~/.local/bin/omarchy-llama-server" >&2; exit 1'
+
+[Install]
+WantedBy=default.target

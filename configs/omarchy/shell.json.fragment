@@ -1,7 +1,8 @@
 {
   "version": 1,
   "idle": {
-    "screensaver": 150,
+    "dim": 180,
+    "screensaver": 400,
     "lock": 300
   },
   "bar": {
