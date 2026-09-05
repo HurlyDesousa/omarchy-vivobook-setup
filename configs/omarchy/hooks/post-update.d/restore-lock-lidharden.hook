@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # Omarchy post-update hook: re-apply lock lid-harden patch after omarchy updates.
-# TODO: paste verbatim from AsusLaptop (~/.config/omarchy/hooks/post-update.d/restore-lock-lidharden.hook)
+# STUB — full hook bytes not in this repo; Omarchy Master may push tarball follow-up.
 #
 # Patch:  <repo>/configs/quickshell/lock-lidharden.patch
 # Target: /usr/share/omarchy/shell/plugins/lock/Service.qml
 # Backup: Service.qml.bak-pre-lidlock-* (on AsusLaptop)
 #
-# Stub — install-all.sh copies this to ~/.config/omarchy/hooks/post-update.d/
+# KNOWN BUG on live AsusLaptop (2026-09-05 ~23:21 CEST):
+#   Live Service.qml references clearCrashedLockProc and strandedRecoverDelay
+#   but NEITHER id is defined. Stranded-recover path uses those missing ids.
+#   When completing the patch, add real Process/Timer defs or ship as incomplete.
+#
+# Confirmed diff themes vs .bak-pre-lidlock-*:
+#   - loadBackground: sessionLock.locked || sessionLock.secure
+#   - stabilize timer: 500 → 1500 ms
 
 set -euo pipefail
 
@@ -15,7 +22,7 @@ PATCH="${REPO_ROOT}/configs/quickshell/lock-lidharden.patch"
 TARGET="/usr/share/omarchy/shell/plugins/lock/Service.qml"
 
 if [[ ! -f "${PATCH}" ]] || grep -q '^# Quickshell lock lid-harden patch (placeholder)' "${PATCH}" 2>/dev/null; then
-  echo "restore-lock-lidharden.hook: patch still placeholder — TODO: INVENTORY" >&2
+  echo "restore-lock-lidharden.hook: patch still placeholder / incomplete (clearCrashedLockProc BUG) — TODO: INVENTORY" >&2
   exit 0
 fi
 

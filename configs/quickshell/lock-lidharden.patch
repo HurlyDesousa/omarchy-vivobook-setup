@@ -1,14 +1,25 @@
-# Quickshell lock lid-harden patch (placeholder)
-# TODO: paste verbatim from AsusLaptop
-#
-# Live sources on AsusLaptop:
-#   /usr/share/omarchy/shell/plugins/lock/Service.qml
-#   Service.qml.bak-pre-lidlock-*  (backup before lid-lock hardening)
-#
-# Generate with:
+# Quickshell lock lid-harden patch (placeholder — INCOMPLETE on live laptop)
+# TODO: INVENTORY — generate from AsusLaptop:
 #   diff -u /usr/share/omarchy/shell/plugins/lock/Service.qml.bak-pre-lidlock-* \
 #           /usr/share/omarchy/shell/plugins/lock/Service.qml \
 #     > configs/quickshell/lock-lidharden.patch
+#
+# Live sources:
+#   /usr/share/omarchy/shell/plugins/lock/Service.qml
+#   Service.qml.bak-pre-lidlock-*  (backup before lid-lock hardening)
+#
+# KNOWN BUG on live AsusLaptop (2026-09-05 ~23:21 CEST):
+#   Live Service.qml references clearCrashedLockProc and strandedRecoverDelay
+#   but NEITHER id is defined (no matching Process { id: ... } or Timer { id: ... }).
+#   The stranded-recover path in the diff vs .bak uses those missing ids.
+#
+# When completing this patch, either:
+#   (a) add real Process/Timer defs for clearCrashedLockProc and strandedRecoverDelay, OR
+#   (b) document and ship the incomplete live patch as-is (broken references).
+#
+# Confirmed diff themes vs .bak-pre-lidlock-*:
+#   - loadBackground: uses sessionLock.locked || sessionLock.secure
+#   - stabilize timer interval: 500 → 1500 ms
 #
 # Re-applied after omarchy updates by:
 #   ~/.config/omarchy/hooks/post-update.d/restore-lock-lidharden.hook

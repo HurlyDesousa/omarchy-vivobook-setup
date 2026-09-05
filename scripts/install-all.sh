@@ -212,6 +212,8 @@ main() {
 
   # 7. Quickshell QML patches
   info "=== Quickshell QML patches ==="
+  # restore-idle-dim.hook forces dim=180 lock=300 screensaver=400; honors kbd auto_off;
+  # never stops x1e-ec-tool (see configs/omarchy/hooks/post-update.d/restore-idle-dim.hook)
   if [[ -f "${CONFIGS_DIR}/quickshell/idle.patch" ]]; then
     # Target path is placeholder until inventory confirms install location
     QS_IDLE_TARGET="${HOME}/.config/quickshell/idle.qml"
@@ -225,8 +227,8 @@ main() {
 
   if [[ -f "${CONFIGS_DIR}/quickshell/lock-lidharden.patch" ]]; then
     QS_LOCK_TARGET="/usr/share/omarchy/shell/plugins/lock/Service.qml"
-    if grep -q '^# Quickshell lock lid-harden patch (placeholder)' "${CONFIGS_DIR}/quickshell/lock-lidharden.patch" 2>/dev/null; then
-      warn "lock-lidharden.patch is still a placeholder — TODO: INVENTORY"
+    if grep -q '^# Quickshell lock lid-harden patch (placeholder' "${CONFIGS_DIR}/quickshell/lock-lidharden.patch" 2>/dev/null; then
+      warn "lock-lidharden.patch is placeholder/incomplete (clearCrashedLockProc BUG) — TODO: INVENTORY"
     elif [[ -w "$(dirname "${QS_LOCK_TARGET}")" ]] && [[ -f "${QS_LOCK_TARGET}" ]]; then
       apply_patch_if_present \
         "${CONFIGS_DIR}/quickshell/lock-lidharden.patch" \

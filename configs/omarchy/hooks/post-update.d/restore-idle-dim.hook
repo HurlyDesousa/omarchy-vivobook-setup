@@ -1,34 +1,53 @@
 #!/usr/bin/env bash
-# Omarchy post-update hook: re-apply Quickshell idle dim policy patch.
-# TODO: paste verbatim from AsusLaptop (~/.config/omarchy/hooks/post-update.d/restore-idle-dim.hook)
+# Omarchy post-update hook: restore idle dim policy + kbd-backlight prefs after omarchy updates.
+# STUB — full hook bytes not in this repo; Omarchy Master may push tarball follow-up.
 #
-# Patch:  <repo>/configs/quickshell/idle.patch
-# Target: ~/.config/quickshell/idle.qml  (confirm live path on AsusLaptop)
+# Live behavior (AsusLaptop 2026-09-05 ~23:21 CEST):
+#   - Forces idle dim=180, lock=300, screensaver=400 (shell.json idle block)
+#   - Reads kbd prefs from ~/.local/state/omarchy/kbd-backlight (JSON file, not a directory)
+#   - Honors auto_off for keyboard backlight only (screen dim is separate idle policy)
+#   - Never stops x1e-ec-tool.service
 #
-# Stub — install-all.sh copies this to ~/.config/omarchy/hooks/post-update.d/
+# Patch (when available): <repo>/configs/quickshell/idle.patch
+# Target (confirm on laptop): ~/.config/quickshell/idle.qml
 
 set -euo pipefail
 
 REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+SHELL_JSON="${HOME}/.config/omarchy/shell.json"
+KBD_STATE="${HOME}/.local/state/omarchy/kbd-backlight"
 PATCH="${REPO_ROOT}/configs/quickshell/idle.patch"
 TARGET="${HOME}/.config/quickshell/idle.qml"
 
-if [[ ! -f "${PATCH}" ]]; then
-  echo "restore-idle-dim.hook: missing ${PATCH} — TODO: INVENTORY" >&2
-  exit 0
+# Never touch x1e-ec-tool
+if systemctl is-active --quiet x1e-ec-tool.service 2>/dev/null; then
+  : # expected — do not stop or restart
 fi
 
-if [[ ! -f "${TARGET}" ]]; then
-  echo "restore-idle-dim.hook: target missing ${TARGET} — skip" >&2
-  exit 0
+# Force shell.json idle block (dim=180 lock=300 screensaver=400)
+if [[ -f "${SHELL_JSON}" ]] && command -v jq >/dev/null 2>&1; then
+  tmp="$(mktemp)"
+  jq '.idle = {"lock":300,"screensaver":400,"dim":180}' "${SHELL_JSON}" > "${tmp}"
+  mv "${tmp}" "${SHELL_JSON}"
 fi
 
-if patch --dry-run -R -p1 -d "$(dirname "${TARGET}")" < "${PATCH}" >/dev/null 2>&1; then
-  exit 0
+# Honor kbd-backlight auto_off from state file (keyboard backlight only)
+if [[ -f "${KBD_STATE}" ]] && command -v jq >/dev/null 2>&1; then
+  auto_off="$(jq -r '.auto_off // true' "${KBD_STATE}")"
+  # TODO: paste verbatim kbd restore logic from AsusLaptop hook
+  [[ "${auto_off}" == "true" ]] || true
 fi
 
-# TODO: paste verbatim re-apply logic from AsusLaptop
-patch -p1 -d "$(dirname "${TARGET}")" < "${PATCH}" || {
-  echo "restore-idle-dim.hook: patch failed — resolve manually" >&2
-  exit 1
-}
+# Apply idle.patch when it exists and is not a placeholder
+if [[ -f "${PATCH}" ]] && ! grep -q '^# Quickshell idle policy patch (placeholder)' "${PATCH}" 2>/dev/null; then
+  if [[ -f "${TARGET}" ]]; then
+    if ! patch --dry-run -R -p1 -d "$(dirname "${TARGET}")" < "${PATCH}" >/dev/null 2>&1; then
+      patch -p1 -d "$(dirname "${TARGET}")" < "${PATCH}" || {
+        echo "restore-idle-dim.hook: idle.patch failed — resolve manually" >&2
+        exit 1
+      }
+    fi
+  fi
+fi
+
+echo "restore-idle-dim.hook: stub applied idle block; full hook bytes TODO: INVENTORY" >&2

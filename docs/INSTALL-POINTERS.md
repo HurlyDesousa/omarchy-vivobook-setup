@@ -57,7 +57,9 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)" --
 install -Dm755 build/bin/llama-server ~/.local/bin/llama-server
 ```
 
-`omarchy-llama-server` listens on `127.0.0.1:8080` via `configs/systemd/user/omarchy-llama-server.service` (stub — paste verbatim ExecStart from AsusLaptop); the served model alias is `local` (what `configs/pi/models.json` expects). Weights: `docs/GGUF.md`.
+`omarchy-llama-server` listens on `127.0.0.1:8080` via `configs/systemd/user/omarchy-llama-server.service` (verbatim from AsusLaptop); wrapper at `~/.local/bin/omarchy-llama-server` with `LLAMA_THREADS=10`, `LLAMA_CTX=8192`, `LD_LIBRARY_PATH=%h/.local/share/llama.cpp/run`. Model alias `local` (what `configs/pi/models.json` expects). Weights: `docs/GGUF.md`.
+
+Battery idle suspend: `configs/systemd/user/battery-idle-suspend.service` runs `~/.local/bin/omarchy-battery-idle-suspend.sh` (1 hour idle on battery only).
 
 ## x1e-ec-tool @ `ce572b3`
 

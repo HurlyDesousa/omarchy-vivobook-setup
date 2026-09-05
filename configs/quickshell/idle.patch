@@ -1,5 +1,13 @@
 # Quickshell idle policy patch (placeholder)
 # TODO: INVENTORY — generate with: diff -u ~/.config/quickshell/idle.qml.orig idle.qml > idle.patch
 #
-# Policy: Omarchy/Quickshell handles screen dim on idle.
+# Live policy (also enforced by restore-idle-dim.hook via shell.json idle block):
+#   dim=180  lock=300  screensaver=400
+#
+# restore-idle-dim.hook (stub — full bytes pending Omarchy tarball follow-up):
+#   - Forces idle dim=180, lock=300, screensaver=400 in Omarchy shell config
+#   - Reads kbd prefs from ~/.local/state/omarchy/kbd-backlight (JSON file)
+#   - Honors auto_off for keyboard backlight only (not screen dim)
+#   - Never stops x1e-ec-tool.service
+#
 # kbd-backlight auto_off is independent — keyboard backlight only.
