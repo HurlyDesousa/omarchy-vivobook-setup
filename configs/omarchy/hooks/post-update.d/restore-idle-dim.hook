@@ -1,34 +1,114 @@
-#!/usr/bin/env bash
-# Omarchy post-update hook: re-apply Quickshell idle dim policy patch.
-# TODO: paste verbatim from AsusLaptop (~/.config/omarchy/hooks/post-update.d/restore-idle-dim.hook)
-#
-# Patch:  <repo>/configs/quickshell/idle.patch
-# Target: ~/.config/quickshell/idle.qml  (confirm live path on AsusLaptop)
-#
-# Stub — install-all.sh copies this to ~/.config/omarchy/hooks/post-update.d/
-
+#!/bin/bash
+# Preserve Omarchy idle.dim support after package updates.
+# Desired state: dim=180 (25% brightness), lock=300, screensaver=400.
+# Also: keyboard RGB off on dim / restore from ~/.local/state/omarchy/kbd-backlight.
+# Do NOT raise lock/screensaver; do NOT use ~10% dim. Never stop x1e-ec-tool.
 set -euo pipefail
 
-REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
-PATCH="${REPO_ROOT}/configs/quickshell/idle.patch"
-TARGET="${HOME}/.config/quickshell/idle.qml"
+TARGET="/usr/share/omarchy/shell/plugins/services/idle/Service.qml"
+PATCHED="${HOME}/.local/share/omarchy/idle-dim/Service.qml"
+HELPER="${HOME}/.local/bin/omarchy-idle-dim"
+SHELL_JSON="${HOME}/.config/omarchy/shell.json"
 
-if [[ ! -f "${PATCH}" ]]; then
-  echo "restore-idle-dim.hook: missing ${PATCH} — TODO: INVENTORY" >&2
-  exit 0
+if [[ -f $PATCHED ]]; then
+  if [[ ! -f $TARGET ]] || ! grep -q 'dimTimeoutSeconds' "$TARGET" 2>/dev/null; then
+    cp "$PATCHED" "$TARGET"
+  elif ! grep -q '/home/hurly/.local/bin/omarchy-idle-dim' "$TARGET" 2>/dev/null; then
+    cp "$PATCHED" "$TARGET"
+  fi
 fi
 
-if [[ ! -f "${TARGET}" ]]; then
-  echo "restore-idle-dim.hook: target missing ${TARGET} — skip" >&2
-  exit 0
+# Ensure helper exists at 25% + kbd idle (never ~10%, never task-manager prefs path)
+if [[ ! -x $HELPER ]] || ! grep -q 'DIM_PCT=25' "$HELPER" 2>/dev/null || ! grep -q 'kbd-backlight' "$HELPER" 2>/dev/null; then
+  install -m 0755 /dev/stdin "$HELPER" <<'EOS'
+#!/bin/bash
+# Dim/restore backlight + keyboard RGB for Omarchy idle.dim (Quickshell IdleMonitor).
+set -euo pipefail
+DEV=dp_aux_backlight
+DIM_PCT=25
+STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/omarchy-idle-dim.state"
+KBD_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/kbd-backlight"
+if [[ ! -f $KBD_STATE && -f /home/hurly/.local/state/omarchy/kbd-backlight ]]; then
+  KBD_STATE=/home/hurly/.local/state/omarchy/kbd-backlight
 fi
-
-if patch --dry-run -R -p1 -d "$(dirname "${TARGET}")" < "${PATCH}" >/dev/null 2>&1; then
-  exit 0
-fi
-
-# TODO: paste verbatim re-apply logic from AsusLaptop
-patch -p1 -d "$(dirname "${TARGET}")" < "${PATCH}" || {
-  echo "restore-idle-dim.hook: patch failed — resolve manually" >&2
-  exit 1
+cur() { brightnessctl -d "$DEV" get; }
+max() { brightnessctl -d "$DEV" max; }
+setb() { brightnessctl -d "$DEV" -q set "$1"; }
+kbd_off() {
+  local auto_off="true"
+  if [[ -f $KBD_STATE ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      auto_off=$(jq -r '.auto_off // true' "$KBD_STATE" 2>/dev/null || echo true)
+    else
+      auto_off=$(sed -n 's/.*"auto_off"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$KBD_STATE" | head -1)
+      [[ -n $auto_off ]] || auto_off="true"
+    fi
+  fi
+  if [[ $auto_off == "false" ]]; then
+    logger -t omarchy-idle-dim "kbd off skip (auto_off=false)"
+    return 0
+  fi
+  if command -v x1e-ec-tool >/dev/null 2>&1; then
+    x1e-ec-tool kb '#000000' >/dev/null 2>&1 || true
+    logger -t omarchy-idle-dim "kbd off #000000"
+  fi
 }
+kbd_restore() {
+  local hex="#ffffff" enabled="true"
+  if [[ -f $KBD_STATE ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      hex=$(jq -r '.hex // "#ffffff"' "$KBD_STATE" 2>/dev/null || echo "#ffffff")
+      enabled=$(jq -r '.enabled // true' "$KBD_STATE" 2>/dev/null || echo true)
+    else
+      hex=$(sed -n 's/.*"hex"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$KBD_STATE" | head -1)
+      enabled=$(sed -n 's/.*"enabled"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$KBD_STATE" | head -1)
+      [[ -n $hex ]] || hex="#ffffff"
+      [[ -n $enabled ]] || enabled="true"
+    fi
+  fi
+  if [[ $enabled != "true" ]]; then
+    logger -t omarchy-idle-dim "kbd restore skip (enabled=$enabled)"
+    return 0
+  fi
+  if command -v x1e-ec-tool >/dev/null 2>&1; then
+    x1e-ec-tool kb "$hex" >/dev/null 2>&1 || true
+    logger -t omarchy-idle-dim "kbd restore $hex"
+  fi
+}
+cmd=${1:-}
+case "$cmd" in
+  dim)
+    saved=$(cur); maxb=$(max); target=$(( maxb * DIM_PCT / 100 ))
+    (( target < 1 )) && target=1
+    if (( target >= saved )); then
+      echo "$saved" > "$STATE"
+      logger -t omarchy-idle-dim "dim skip (already <=${DIM_PCT}%): $saved"
+    else
+      echo "$saved" > "$STATE"; setb "$target"
+      logger -t omarchy-idle-dim "dim ${saved}->${target} (${DIM_PCT}% of ${maxb})"
+    fi
+    kbd_off
+    ;;
+  restore)
+    if [[ -f $STATE ]]; then setb "$(cat "$STATE")"; rm -f "$STATE"; logger -t omarchy-idle-dim "restore done"; fi
+    kbd_restore
+    ;;
+  *) echo "usage: $0 dim|restore" >&2; exit 2 ;;
+esac
+EOS
+fi
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+p = Path.home() / ".config/omarchy/shell.json"
+if not p.exists():
+    raise SystemExit(0)
+d = json.loads(p.read_text())
+idle = d.get("idle") or {}
+idle["dim"] = 180
+idle["lock"] = 300
+idle["screensaver"] = 400
+d["idle"] = idle
+p.write_text(json.dumps(d, indent=2) + "\n")
+PY
