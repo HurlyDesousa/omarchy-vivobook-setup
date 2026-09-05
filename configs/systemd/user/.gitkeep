@@ -1,0 +1,6 @@
+# systemd user unit fragments
+# TODO: INVENTORY — export custom user units from ~/.config/systemd/user/
+#
+# Notes:
+#   - Do NOT add a unit that stops x1e-ec-tool.service
+#   - x1e-ec-tool.service is system-level; only document, do not override

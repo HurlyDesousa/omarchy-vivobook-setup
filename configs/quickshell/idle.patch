@@ -1,0 +1,5 @@
+# Quickshell idle policy patch (placeholder)
+# TODO: INVENTORY — generate with: diff -u ~/.config/quickshell/idle.qml.orig idle.qml > idle.patch
+#
+# Policy: Omarchy/Quickshell handles screen dim on idle.
+# kbd-backlight auto_off is independent — keyboard backlight only.

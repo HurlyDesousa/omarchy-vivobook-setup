@@ -1,0 +1,13 @@
+# GGUF model weights — never commit
+*.gguf
+*.gguf.partial
+
+# Download staging
+.models/
+
+# Local clone dir used by install-all.sh (optional)
+repos/
+
+# Editor / OS
+*~
+.DS_Store
