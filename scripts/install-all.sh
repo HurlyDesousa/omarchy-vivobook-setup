@@ -1,0 +1,259 @@
+#!/usr/bin/env bash
+# Idempotent restore orchestrator for Omarchy Vivobook S15 (S5507QA).
+# Safe to re-run. Fails soft on missing inventory files.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CONFIGS_DIR="${REPO_ROOT}/configs"
+REPOS_DIR="${OMARCHY_REPOS_DIR:-${HOME}/src/omarchy-vivobook-setup/repos}"
+
+# --- helpers -----------------------------------------------------------------
+
+info()  { printf '\033[1;34m[INFO]\033[0m %s\n' "$*"; }
+warn()  { printf '\033[1;33m[WARN]\033[0m %s\n' "$*"; }
+ok()    { printf '\033[1;32m[ OK ]\033[0m %s\n' "$*"; }
+fail()  { printf '\033[1;31m[FAIL]\033[0m %s\n' "$*"; }
+
+clone_or_update() {
+  local url="$1"
+  local name="$2"
+  local dir="${REPOS_DIR}/${name}"
+
+  mkdir -p "${REPOS_DIR}"
+
+  if [[ -d "${dir}/.git" ]]; then
+    info "Updating ${name}…"
+    git -C "${dir}" pull --ff-only || warn "Could not fast-forward ${name}; resolve manually in ${dir}"
+  else
+    info "Cloning ${name}…"
+    git clone "${url}" "${dir}" || {
+      warn "Clone failed for ${name}; skipping."
+      return 1
+    }
+  fi
+  return 0
+}
+
+run_repo_install() {
+  local name="$1"
+  local dir="${REPOS_DIR}/${name}"
+
+  if [[ ! -d "${dir}" ]]; then
+    warn "Repo ${name} not present; skipping install."
+    return 0
+  fi
+
+  if [[ -x "${dir}/install.sh" ]]; then
+    info "Running ${name}/install.sh…"
+    (cd "${dir}" && ./install.sh) || warn "${name}/install.sh returned non-zero; continuing."
+  else
+    warn "No install.sh in ${name}; see docs/REPOS.md for manual steps."
+  fi
+}
+
+apply_fragment() {
+  local src="$1"
+  local dest="$2"
+  local label="$3"
+
+  if [[ ! -f "${src}" ]]; then
+    warn "Missing inventory file: ${src} (${label}) — TODO: INVENTORY"
+    return 0
+  fi
+
+  mkdir -p "$(dirname "${dest}")"
+
+  if [[ -f "${dest}" ]] && cmp -s "${src}" "${dest}"; then
+    ok "Already applied: ${label}"
+    return 0
+  fi
+
+  if [[ -f "${dest}" ]]; then
+    info "Updating ${label} → ${dest}"
+  else
+    info "Installing ${label} → ${dest}"
+  fi
+  cp "${src}" "${dest}"
+  ok "${label}"
+}
+
+apply_patch_if_present() {
+  local patch="$1"
+  local target="$2"
+  local label="$3"
+
+  if [[ ! -f "${patch}" ]]; then
+    warn "Missing patch: ${patch} (${label}) — TODO: INVENTORY"
+    return 0
+  fi
+
+  if [[ ! -f "${target}" ]]; then
+    warn "Patch target missing: ${target} (${label}); apply manually after Omarchy base install."
+    return 0
+  fi
+
+  if patch --dry-run -R -p1 -d "$(dirname "${target}")" < "${patch}" >/dev/null 2>&1; then
+    ok "Patch already applied: ${label}"
+    return 0
+  fi
+
+  info "Applying patch: ${label}"
+  patch -p1 -d "$(dirname "${target}")" < "${patch}" || warn "Patch failed for ${label}; resolve manually."
+}
+
+ensure_state_dir() {
+  local dir="$1"
+  mkdir -p "${dir}"
+  ok "State dir: ${dir}"
+}
+
+# --- main --------------------------------------------------------------------
+
+main() {
+  info "omarchy-vivobook-setup restore (repo: ${REPO_ROOT})"
+  echo
+
+  # 1. Related repos
+  info "=== Related repositories ==="
+  clone_or_update "https://github.com/HurlyDesousa/omarchy-task-manager.git" \
+    "omarchy-task-manager" || true
+  clone_or_update "https://github.com/HurlyDesousa/linux-aarch64-vivobook.git" \
+    "linux-aarch64-vivobook" || true
+  echo
+
+  # 2. Repo install scripts
+  info "=== Repo install scripts ==="
+  run_repo_install "omarchy-task-manager"
+  info "linux-aarch64-vivobook: kernel install is manual/reboot-required — see docs/REPOS.md"
+  echo
+
+  # 3. Hyprland config fragments
+  info "=== Hyprland ==="
+  apply_fragment \
+    "${CONFIGS_DIR}/hypr/autostart.lua.fragment" \
+    "${HOME}/.config/hypr/autostart.lua" \
+    "hypr autostart.lua"
+  echo
+
+  # 4. Omarchy shell.json fragment (merge note — full merge TODO: INVENTORY)
+  info "=== Omarchy shell ==="
+  if [[ -f "${CONFIGS_DIR}/omarchy/shell.json.fragment" ]]; then
+    mkdir -p "${HOME}/.config/omarchy"
+    if [[ ! -f "${HOME}/.config/omarchy/shell.json" ]]; then
+      apply_fragment \
+        "${CONFIGS_DIR}/omarchy/shell.json.fragment" \
+        "${HOME}/.config/omarchy/shell.json" \
+        "omarchy shell.json (initial)"
+    else
+      warn "shell.json already exists — manual merge required from configs/omarchy/shell.json.fragment"
+      warn "TODO: INVENTORY — implement JSON merge or document jq recipe"
+    fi
+  else
+    warn "Missing configs/omarchy/shell.json.fragment — TODO: INVENTORY"
+  fi
+
+  # Plugin stubs / symlinks
+  if [[ -d "${CONFIGS_DIR}/omarchy/plugins" ]]; then
+    mkdir -p "${HOME}/.config/omarchy/plugins"
+    for stub in "${CONFIGS_DIR}"/omarchy/plugins/*; do
+      [[ -e "${stub}" ]] || continue
+      base="$(basename "${stub}")"
+      dest="${HOME}/.config/omarchy/plugins/${base}"
+      if [[ -L "${dest}" || -e "${dest}" ]]; then
+        ok "Plugin stub exists: ${base}"
+      else
+        ln -sf "${stub}" "${dest}" 2>/dev/null || cp -a "${stub}" "${dest}"
+        ok "Installed plugin stub: ${base}"
+      fi
+    done
+  else
+    warn "No configs/omarchy/plugins/ yet — TODO: INVENTORY"
+  fi
+  echo
+
+  # 5. State directories
+  info "=== State directories ==="
+  ensure_state_dir "${HOME}/.local/state/omarchy/task-manager"
+  ensure_state_dir "${HOME}/.local/state/omarchy/kbd-backlight"
+
+  # Default kbd-backlight state files if missing
+  for f in hex enabled autostart auto_off; do
+    state_file="${HOME}/.local/state/omarchy/kbd-backlight/${f}"
+    if [[ ! -f "${state_file}" ]] && [[ -f "${CONFIGS_DIR}/state/kbd-backlight/${f}.default" ]]; then
+      cp "${CONFIGS_DIR}/state/kbd-backlight/${f}.default" "${state_file}"
+      ok "kbd-backlight default: ${f}"
+    fi
+  done
+  echo
+
+  # 6. systemd user units
+  info "=== systemd user units ==="
+  if [[ -d "${CONFIGS_DIR}/systemd/user" ]]; then
+    mkdir -p "${HOME}/.config/systemd/user"
+    for unit in "${CONFIGS_DIR}"/systemd/user/*; do
+      [[ -f "${unit}" ]] || continue
+      apply_fragment "${unit}" "${HOME}/.config/systemd/user/$(basename "${unit}")" \
+        "systemd $(basename "${unit}")"
+    done
+    systemctl --user daemon-reload 2>/dev/null || warn "Could not reload user systemd (no session?)"
+  else
+    warn "No configs/systemd/user/ yet — TODO: INVENTORY"
+  fi
+  echo
+
+  # 7. Quickshell QML patches
+  info "=== Quickshell QML patches ==="
+  if [[ -f "${CONFIGS_DIR}/quickshell/idle.patch" ]]; then
+    # Target path is placeholder until inventory confirms install location
+    QS_IDLE_TARGET="${HOME}/.config/quickshell/idle.qml"
+    apply_patch_if_present \
+      "${CONFIGS_DIR}/quickshell/idle.patch" \
+      "${QS_IDLE_TARGET}" \
+      "quickshell idle policy"
+  else
+    warn "No configs/quickshell/idle.patch — TODO: INVENTORY"
+  fi
+  echo
+
+  # 8. x1e-ec-tool reminder
+  info "=== x1e-ec-tool ==="
+  if systemctl is-active --quiet x1e-ec-tool.service 2>/dev/null; then
+    ok "x1e-ec-tool.service is active (do not stop)"
+  else
+    warn "x1e-ec-tool.service not active — install/enable separately; never stop once running"
+  fi
+  echo
+
+  # 9. mise / local AI reminder
+  info "=== Local AI (mise) ==="
+  if command -v mise >/dev/null 2>&1; then
+    ok "mise found — run 'mise install' if tools are missing"
+  else
+    warn "mise not in PATH — TODO: INVENTORY for tool versions (pi, grok, llama-server)"
+  fi
+  if [[ -x "${HOME}/.local/bin/cursor" ]]; then
+    ok "cursor: ${HOME}/.local/bin/cursor"
+  else
+    warn "cursor not at ~/.local/bin/cursor — reinstall Cursor ARM build"
+  fi
+  echo
+
+  # 10. SECRETS checklist
+  info "=== SECRETS checklist ==="
+  echo "  Re-authenticate after restore (see docs/SECRETS.md):"
+  echo "    [ ] LUKS passphrase (reboot — no SSH until unlocked)"
+  echo "    [ ] Cursor OAuth"
+  echo "    [ ] pi ~/.pi auth (NEVER commit)"
+  echo "    [ ] Grok CLI auth"
+  echo "    [ ] GGUF model: ./scripts/fetch-gguf.sh"
+  echo "    [ ] llama-server :8080"
+  echo
+  info "Full checklist: ${REPO_ROOT}/docs/SECRETS.md"
+  echo
+
+  ok "Restore pass complete (soft failures reported above)."
+  info "TODO: INVENTORY — re-run after Omarchy Master merges live config dump."
+}
+
+main "$@"

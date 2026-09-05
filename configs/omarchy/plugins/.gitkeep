@@ -1,0 +1,8 @@
+# Placeholder for Omarchy bar plugin config stubs.
+# TODO: INVENTORY — symlink or copy from omarchy-task-manager after install.
+#
+# Expected plugins (from omarchy-task-manager):
+#   - task-manager
+#   - kbd-backlight
+#
+# install-all.sh enables plugins under ~/.config/omarchy/plugins/

@@ -1,0 +1,10 @@
+# Hyprland autostart.lua fragment
+# TODO: INVENTORY — replace with live export from ~/.config/hypr/autostart.lua
+#
+# Known requirement: float-only for art.sw.omarchy.TaskManager; no size/move clamp.
+
+# Task Manager — float only, no size/move restrictions
+# windowrulev2 = float, class:^(art\.sw\.omarchy\.TaskManager)$
+# windowrulev2 = noinitialfocus, class:^(art\.sw\.omarchy\.TaskManager)$
+#
+# TODO: INVENTORY — confirm exact windowrule syntax for current Hyprland version

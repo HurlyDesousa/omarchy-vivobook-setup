@@ -1,0 +1,13 @@
+{
+  "_comment": "Omarchy shell.json fragment — TODO: INVENTORY merge with live ~/.config/omarchy/shell.json",
+  "plugins": {
+    "task-manager": {
+      "enabled": true,
+      "_todo": "INVENTORY — bar position, icon, and plugin options from live dump"
+    },
+    "kbd-backlight": {
+      "enabled": true,
+      "_todo": "INVENTORY — auto_off affects keyboard backlight only, not screen dim"
+    }
+  }
+}
