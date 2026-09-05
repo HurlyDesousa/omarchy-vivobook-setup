@@ -134,6 +134,10 @@ main() {
     "${CONFIGS_DIR}/hypr/autostart.lua.fragment" \
     "${HOME}/.config/hypr/autostart.lua" \
     "hypr autostart.lua"
+  apply_fragment \
+    "${CONFIGS_DIR}/hypr/input.lua.fragment" \
+    "${HOME}/.config/hypr/input.lua" \
+    "hypr input.lua"
   echo
 
   # 4. Omarchy shell.json fragment (merge note — full merge TODO: INVENTORY)
@@ -175,16 +179,20 @@ main() {
   # 5. State directories
   info "=== State directories ==="
   ensure_state_dir "${HOME}/.local/state/omarchy/task-manager"
-  ensure_state_dir "${HOME}/.local/state/omarchy/kbd-backlight"
 
-  # Default kbd-backlight state files if missing
-  for f in hex enabled autostart auto_off; do
-    state_file="${HOME}/.local/state/omarchy/kbd-backlight/${f}"
-    if [[ ! -f "${state_file}" ]] && [[ -f "${CONFIGS_DIR}/state/kbd-backlight/${f}.default" ]]; then
-      cp "${CONFIGS_DIR}/state/kbd-backlight/${f}.default" "${state_file}"
-      ok "kbd-backlight default: ${f}"
-    fi
-  done
+  # kbd-backlight state is a single JSON *file* written by KbdBacklight.qml
+  # (~/.local/state/omarchy/kbd-backlight). Never create a directory at that path.
+  kbd_state="${HOME}/.local/state/omarchy/kbd-backlight"
+  if [[ -d "${kbd_state}" ]]; then
+    warn "${kbd_state} is a directory (pre-inventory layout); move it aside so the plugin can write its JSON state file"
+  elif [[ -f "${kbd_state}" ]]; then
+    ok "kbd-backlight state present (keeping live values)"
+  elif [[ -f "${CONFIGS_DIR}/state/kbd-backlight.json.default" ]]; then
+    cp "${CONFIGS_DIR}/state/kbd-backlight.json.default" "${kbd_state}"
+    ok "kbd-backlight default state → ${kbd_state}"
+  else
+    warn "Missing configs/state/kbd-backlight.json.default — TODO: INVENTORY"
+  fi
   echo
 
   # 6. systemd user units
@@ -235,7 +243,22 @@ main() {
   if [[ -x "${HOME}/.local/bin/cursor" ]]; then
     ok "cursor: ${HOME}/.local/bin/cursor"
   else
-    warn "cursor not at ~/.local/bin/cursor — reinstall Cursor ARM build"
+    warn "cursor not at ~/.local/bin/cursor — reinstall Cursor ARM build (docs/INSTALL-POINTERS.md)"
+  fi
+
+  # pi (~/.pi/agent): models.json is fully managed; settings.json only seeded when absent.
+  # Nothing under ~/.pi is ever read back into this repo (auth.json etc. are secrets).
+  apply_fragment \
+    "${CONFIGS_DIR}/pi/models.json" \
+    "${HOME}/.pi/agent/models.json" \
+    "pi models.json (llama-local)"
+  if [[ -f "${HOME}/.pi/agent/settings.json" ]]; then
+    ok "pi settings.json present (keeping live values)"
+  else
+    apply_fragment \
+      "${CONFIGS_DIR}/pi/settings.json.defaults" \
+      "${HOME}/.pi/agent/settings.json" \
+      "pi settings.json (defaults)"
   fi
   echo
 
