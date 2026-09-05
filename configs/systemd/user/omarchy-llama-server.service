@@ -1,0 +1,18 @@
+[Unit]
+Description=llama.cpp local server (Omarchy)
+After=default.target
+ConditionPathExists=%h/.local/bin/omarchy-llama-server
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/omarchy-llama-server
+Restart=on-failure
+RestartSec=3
+Environment=LLAMA_HOST=127.0.0.1
+Environment=LLAMA_PORT=8080
+Environment=LLAMA_THREADS=10
+Environment=LLAMA_CTX=8192
+Environment=LD_LIBRARY_PATH=%h/.local/share/llama.cpp/run
+
+[Install]
+WantedBy=default.target

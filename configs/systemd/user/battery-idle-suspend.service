@@ -1,0 +1,13 @@
+[Unit]
+Description=Suspend after 1 hour idle on battery only
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/omarchy-battery-idle-suspend.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

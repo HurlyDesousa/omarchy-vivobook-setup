@@ -1,0 +1,15 @@
+-- Keep only your personal input overrides here. Uncommented settings below
+-- replace Omarchy's defaults.
+
+-- Live AsusLaptop (Vivobook S15 S5507QA) touchpad overrides, 2026-09-05.
+hl.config({
+  input = {
+    touchpad = {
+      -- Use natural (inverse) scrolling.
+      natural_scroll = true,
+
+      -- Control the speed of your scrolling (Omarchy default: 0.4).
+      scroll_factor = 0.28,
+    },
+  },
+})

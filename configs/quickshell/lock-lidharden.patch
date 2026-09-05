@@ -1,0 +1,14 @@
+# Quickshell lock lid-harden patch (placeholder)
+# TODO: paste verbatim from AsusLaptop
+#
+# Live sources on AsusLaptop:
+#   /usr/share/omarchy/shell/plugins/lock/Service.qml
+#   Service.qml.bak-pre-lidlock-*  (backup before lid-lock hardening)
+#
+# Generate with:
+#   diff -u /usr/share/omarchy/shell/plugins/lock/Service.qml.bak-pre-lidlock-* \
+#           /usr/share/omarchy/shell/plugins/lock/Service.qml \
+#     > configs/quickshell/lock-lidharden.patch
+#
+# Re-applied after omarchy updates by:
+#   ~/.config/omarchy/hooks/post-update.d/restore-lock-lidharden.hook

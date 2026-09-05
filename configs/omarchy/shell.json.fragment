@@ -1,13 +1,73 @@
 {
-  "_comment": "Omarchy shell.json fragment — TODO: INVENTORY merge with live ~/.config/omarchy/shell.json",
-  "plugins": {
-    "task-manager": {
-      "enabled": true,
-      "_todo": "INVENTORY — bar position, icon, and plugin options from live dump"
-    },
-    "kbd-backlight": {
-      "enabled": true,
-      "_todo": "INVENTORY — auto_off affects keyboard backlight only, not screen dim"
+  "version": 1,
+  "idle": {
+    "dim": 180,
+    "screensaver": 400,
+    "lock": 300
+  },
+  "bar": {
+    "position": "top",
+    "transparent": false,
+    "centerAnchor": "omarchy.clock",
+    "layout": {
+      "left": [
+        {
+          "id": "omarchy.menu"
+        },
+        {
+          "id": "omarchy.workspaces"
+        }
+      ],
+      "center": [
+        {
+          "id": "omarchy.indicators"
+        },
+        {
+          "id": "sw.art.kbd-backlight"
+        },
+        {
+          "id": "omarchy.clock",
+          "format": "dddd HH:mm",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "verticalFormat": "HH\n\u2014\nmm"
+        },
+        {
+          "id": "omarchy.keyboard-layout"
+        },
+        {
+          "id": "omarchy.weather"
+        },
+        {
+          "id": "sw.art.task-manager"
+        },
+        {
+          "id": "omarchy.system-update"
+        }
+      ],
+      "right": [
+        {
+          "id": "omarchy.tray"
+        },
+        {
+          "id": "omarchy.agents"
+        },
+        {
+          "id": "omarchy.bluetooth"
+        },
+        {
+          "id": "omarchy.network"
+        },
+        {
+          "id": "omarchy.audio"
+        },
+        {
+          "id": "omarchy.monitor"
+        },
+        {
+          "id": "omarchy.power"
+        }
+      ]
     }
-  }
+  },
+  "plugins": []
 }
