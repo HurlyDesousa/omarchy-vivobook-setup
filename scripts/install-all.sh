@@ -210,6 +210,21 @@ main() {
   fi
   echo
 
+  # 6b. Local bin helpers (configs/bin -> ~/.local/bin)
+  info "=== Local bin helpers ==="
+  if [[ -d "${CONFIGS_DIR}/bin" ]]; then
+    mkdir -p "${HOME}/.local/bin"
+    for bin in "${CONFIGS_DIR}"/bin/*; do
+      [[ -f "${bin}" ]] || continue
+      dest="${HOME}/.local/bin/$(basename "${bin}")"
+      apply_fragment "${bin}" "${dest}" "bin $(basename "${bin}")"
+      chmod +x "${dest}" 2>/dev/null || true
+    done
+  else
+    warn "No configs/bin/ yet — TODO: INVENTORY"
+  fi
+  echo
+
   # 7. Quickshell QML patches
   info "=== Quickshell QML patches ==="
   if [[ -f "${CONFIGS_DIR}/quickshell/idle.patch" ]]; then
