@@ -1,12 +1,38 @@
+var PROFILE_ORDER = ["power-saver", "balanced", "performance", "full-speed"]
+
 function clampIndex(index, length) {
   if (length <= 0) return 0
   return Math.max(0, Math.min(length - 1, index))
 }
 
-function selectProfileIndex(index, delta, profiles) {
+function orderedProfiles(profiles) {
   var values = Array.isArray(profiles) ? profiles : []
+  var out = []
+  for (var i = 0; i < PROFILE_ORDER.length; i++) {
+    if (values.indexOf(PROFILE_ORDER[i]) >= 0) out.push(PROFILE_ORDER[i])
+  }
+  for (var j = 0; j < values.length; j++) {
+    if (out.indexOf(values[j]) < 0) out.push(values[j])
+  }
+  return out
+}
+
+function selectProfileIndex(index, delta, profiles) {
+  var values = orderedProfiles(profiles)
   if (values.length === 0) return 0
   return clampIndex(index + delta, values.length)
+}
+
+function selectProfileGridIndex(index, deltaX, deltaY, profiles, columns) {
+  var values = orderedProfiles(profiles)
+  var cols = columns || 2
+  if (values.length === 0) return 0
+  var rows = Math.ceil(values.length / cols)
+  var row = Math.floor(index / cols)
+  var col = index % cols
+  if (deltaX !== 0) col = clampIndex(col + deltaX, cols)
+  if (deltaY !== 0) row = clampIndex(row + deltaY, rows)
+  return clampIndex(row * cols + col, values.length)
 }
 
 function parseKeyValue(raw) {
@@ -31,10 +57,12 @@ function parseProfiles(raw, previousIndex) {
     list.push(parts[0])
     if (parts[1] === "1") active = parts[0]
   }
+  var ordered = orderedProfiles(list)
+  var idx = active ? ordered.indexOf(active) : clampIndex(previousIndex || 0, ordered.length)
   return {
-    profiles: list,
+    profiles: ordered,
     activeProfile: active,
-    profileIndex: clampIndex(previousIndex || 0, list.length)
+    profileIndex: idx >= 0 ? idx : clampIndex(previousIndex || 0, ordered.length)
   }
 }
 
@@ -101,8 +129,11 @@ function modeLabel(device, onBattery, states) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    PROFILE_ORDER: PROFILE_ORDER,
     clampIndex: clampIndex,
+    orderedProfiles: orderedProfiles,
     selectProfileIndex: selectProfileIndex,
+    selectProfileGridIndex: selectProfileGridIndex,
     parseKeyValue: parseKeyValue,
     parseProfiles: parseProfiles,
     profileIcon: profileIcon,
