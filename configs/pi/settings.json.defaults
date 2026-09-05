@@ -1,20 +1,6 @@
 {
+  "theme": "omarchy-system",
+  "lastChangelogVersion": "0.85.1",
   "defaultProvider": "llama-local",
-  "defaultModel": "local",
-  "defaultThinkingLevel": "off",
-  "theme": "dark",
-  "enableInstallTelemetry": false,
-  "compaction": {
-    "enabled": true,
-    "reserveTokens": 8192,
-    "keepRecentTokens": 12000
-  },
-  "retry": {
-    "enabled": true,
-    "maxRetries": 3,
-    "provider": {
-      "timeoutMs": 600000,
-      "maxRetries": 0
-    }
-  }
+  "defaultModel": "Qwen2.5-3B-Instruct-Q4_K_M"
 }

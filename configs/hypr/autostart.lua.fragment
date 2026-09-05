@@ -1,4 +1,5 @@
--- Keep only your personal autostart overrides here.
+-- Extra autostart processes.
+-- Task Manager: persist across reboot/login, bottom-right, half width x quarter height.
 
 -- omarchy-task-manager begin
 o.launch_on_start("/home/hurly/.local/bin/omarchy-task-manager")

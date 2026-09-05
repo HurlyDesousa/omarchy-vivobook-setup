@@ -1,14 +1,36 @@
-# Quickshell lock lid-harden patch (placeholder)
-# TODO: paste verbatim from AsusLaptop
-#
-# Live sources on AsusLaptop:
-#   /usr/share/omarchy/shell/plugins/lock/Service.qml
-#   Service.qml.bak-pre-lidlock-*  (backup before lid-lock hardening)
-#
-# Generate with:
-#   diff -u /usr/share/omarchy/shell/plugins/lock/Service.qml.bak-pre-lidlock-* \
-#           /usr/share/omarchy/shell/plugins/lock/Service.qml \
-#     > configs/quickshell/lock-lidharden.patch
-#
-# Re-applied after omarchy updates by:
-#   ~/.config/omarchy/hooks/post-update.d/restore-lock-lidharden.hook
+--- a/usr/share/omarchy/shell/plugins/lock/Service.qml
++++ b/usr/share/omarchy/shell/plugins/lock/Service.qml
+@@ -96,7 +96,11 @@
+ 
+     strandedLock = false
+     logEvent("lock-stranded: recovering")
+-    beginLock()
++    // Hyprland may still be showing the Oopsie failsafe from a dead lock
++    // client. Clear it, then wait for outputs to settle before beginLock
++    // so WlSessionLockSurface is not shown without an active lock.
++    if (!clearCrashedLockProc.running) clearCrashedLockProc.running = true
++    if (!strandedRecoverDelay.running) strandedRecoverDelay.start()
+   }
+ 
+   function refreshBackground() {
+@@ -275,7 +279,7 @@
+         failureMessage: root.failureMessage
+         failedAttempts: root.failedAttempts
+         inputEnabled: root.lockRequested
+-        loadBackground: root.locked
++        loadBackground: sessionLock.locked || sessionLock.secure
+         passwordText: root.enteredPassword
+         onPasswordTextEdited: function(password) { root.enteredPassword = password }
+         onSubmitPassword: function(password) { root.submitPassword(password) }
+@@ -433,7 +437,10 @@
+ 
+   Timer {
+     id: sessionLockStabilizeTimer
+-    interval: 500
++    // 1500ms: lid-close/resume often reconfigures outputs; showing lock
++    // surfaces before ext-session-lock is active aborts Quickshell
++    // (FATAL: Tried to show lockscreen surfaces without active lock).
++    interval: 1500
+     repeat: false
+     onTriggered: root.requestSessionLock()
+   }

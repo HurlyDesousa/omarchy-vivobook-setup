@@ -1,5 +1,144 @@
-# Quickshell idle policy patch (placeholder)
-# TODO: INVENTORY — generate with: diff -u ~/.config/quickshell/idle.qml.orig idle.qml > idle.patch
-#
-# Policy: Omarchy/Quickshell handles screen dim on idle.
-# kbd-backlight auto_off is independent — keyboard backlight only.
+--- a/usr/share/omarchy/shell/plugins/services/idle/Service.qml
++++ b/usr/share/omarchy/shell/plugins/services/idle/Service.qml
+@@ -16,10 +16,13 @@
+   readonly property string stayAwakeStatePath: stayAwakeStateDir + "/stay-awake"
+   readonly property int defaultScreensaverSeconds: 150
+   readonly property int defaultLockSeconds: 300
++  readonly property int defaultDimSeconds: 0
+   readonly property var idleConfig: shell && shell.shellConfig && shell.shellConfig.idle ? shell.shellConfig.idle : ({})
+   readonly property int screensaverTimeoutSeconds: secondsFromConfig(idleConfig.screensaver, defaultScreensaverSeconds)
+   readonly property int lockTimeoutSeconds: secondsFromConfig(idleConfig.lock, defaultLockSeconds)
+-  readonly property int firstIdleTimeoutSeconds: Math.min(screensaverTimeoutSeconds, lockTimeoutSeconds)
++  readonly property int dimTimeoutSeconds: secondsFromConfig(idleConfig.dim, defaultDimSeconds)
++  readonly property int firstIdleTimeoutSeconds: dimTimeoutSeconds > 0 ? Math.min(dimTimeoutSeconds, screensaverTimeoutSeconds, lockTimeoutSeconds) : Math.min(screensaverTimeoutSeconds, lockTimeoutSeconds)
++  readonly property int dimDelaySeconds: dimTimeoutSeconds > 0 ? Math.max(0, dimTimeoutSeconds - firstIdleTimeoutSeconds) : -1
+   readonly property int screensaverDelaySeconds: Math.max(0, screensaverTimeoutSeconds - firstIdleTimeoutSeconds)
+   readonly property int lockDelaySeconds: Math.max(0, lockTimeoutSeconds - firstIdleTimeoutSeconds)
+   readonly property bool idleEnabled: stayAwakeStateLoaded && !stayAwake
+@@ -31,6 +34,7 @@
+   property bool pendingStayAwakePersist: false
+   property bool idledThisCycle: false
+   property bool screensaverStartedThisCycle: false
++  property bool dimmedThisCycle: false
+   property string lastEvent: "starting"
+   property string lastEventAt: ""
+   property var screensaverWindows: ({})
+@@ -68,10 +72,26 @@
+     runProcess(screensaverProcess, "screensaver", "[[ $(omarchy-shell lock isLocked 2>/dev/null) == \"true\" ]] || omarchy-launch-screensaver")
+   }
+ 
++  function dimDisplay() {
++    if (root.dimmedThisCycle) return
++    if (root.dimTimeoutSeconds <= 0) return
++    root.dimmedThisCycle = true
++    runProcess(dimProcess, "dim", "/home/hurly/.local/bin/omarchy-idle-dim dim")
++  }
++
++  function restoreDisplay(reason) {
++    dimTimer.stop()
++    if (!root.dimmedThisCycle) return
++    root.dimmedThisCycle = false
++    logEvent("restore-dim", reason || "requested")
++    runProcess(restoreProcess, "restore-dim", "/home/hurly/.local/bin/omarchy-idle-dim restore")
++  }
++
+   function lockSystem(reason) {
+     logEvent("lock-system", reason || "requested")
+     screensaverTimer.stop()
+     lockTimer.stop()
++    dimTimer.stop()
+     screensaverLaunchGraceTimer.stop()
+     root.idledThisCycle = false
+     root.screensaverStartedThisCycle = false
+@@ -85,11 +105,16 @@
+       return
+     }
+ 
+-    logEvent("idle-cycle-start", "screensaver=" + root.screensaverTimeoutSeconds + " lock=" + root.lockTimeoutSeconds)
++    logEvent("idle-cycle-start", "dim=" + root.dimTimeoutSeconds + " screensaver=" + root.screensaverTimeoutSeconds + " lock=" + root.lockTimeoutSeconds)
+     root.idledThisCycle = true
+     root.screensaverStartedThisCycle = false
+     resetScreensaverWindows()
+ 
++    if (root.dimTimeoutSeconds > 0) {
++      if (root.dimDelaySeconds === 0) dimDisplay()
++      else dimTimer.restart()
++    }
++
+     if (root.screensaverDelaySeconds === 0) launchScreensaver()
+     else screensaverTimer.restart()
+ 
+@@ -101,8 +126,10 @@
+     logEvent("idle-cycle-cancel", reason || "requested")
+     screensaverTimer.stop()
+     lockTimer.stop()
++    dimTimer.stop()
+     screensaverLaunchGraceTimer.stop()
+ 
++    restoreDisplay(reason || "idle-cycle-cancel")
+     if (root.idledThisCycle) runProcess(wakeProcess, "wake", "omarchy-system-wake")
+ 
+     root.idledThisCycle = false
+@@ -171,6 +198,7 @@
+ 
+   function handleIdleChanged() {
+     logEvent("idle-monitor", idleMonitor.isIdle ? "idle" : "active")
++    if (!idleMonitor.isIdle) restoreDisplay("activity")
+     if (!root.idleEnabled) return
+ 
+     if (idleMonitor.isIdle) startIdleCycle()
+@@ -188,18 +216,24 @@
+       screensaverStarted: root.screensaverStartedThisCycle,
+       screensaver: root.screensaverTimeoutSeconds,
+       lock: root.lockTimeoutSeconds,
++      dim: root.dimTimeoutSeconds,
++      dimmed: root.dimmedThisCycle,
++      dimDelay: root.dimDelaySeconds,
+       screensaverDelay: root.screensaverDelaySeconds,
+       lockDelay: root.lockDelaySeconds,
+       screensaverWindows: root.screensaverWindowCount,
+       timers: {
+         screensaver: screensaverTimer.running,
+         lock: lockTimer.running,
++        dim: dimTimer.running,
+         screensaverLaunchGrace: screensaverLaunchGraceTimer.running
+       },
+       processes: {
+         screensaver: screensaverProcess.running,
+         lock: lockProcess.running,
+-        wake: wakeProcess.running
++        wake: wakeProcess.running,
++        dim: dimProcess.running,
++        restore: restoreProcess.running
+       },
+       lastEvent: root.lastEvent,
+       lastEventAt: root.lastEventAt
+@@ -270,6 +304,13 @@
+   }
+ 
+   Timer {
++    id: dimTimer
++    interval: Math.max(0, root.dimDelaySeconds) * 1000
++    repeat: false
++    onTriggered: if (root.idleEnabled && root.idledThisCycle) root.dimDisplay()
++  }
++
++  Timer {
+     id: screensaverLaunchGraceTimer
+     interval: 3000
+     repeat: false
+@@ -297,6 +338,14 @@
+     id: wakeProcess
+     onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "wake exitCode=" + exitCode + " status=" + exitStatus) }
+   }
++  Process {
++    id: dimProcess
++    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "dim exitCode=" + exitCode + " status=" + exitStatus) }
++  }
++  Process {
++    id: restoreProcess
++    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "restore-dim exitCode=" + exitCode + " status=" + exitStatus) }
++  }
+ 
+   Process {
+     id: stayAwakeStateProbe

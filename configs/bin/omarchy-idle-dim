@@ -1,0 +1,91 @@
+#!/bin/bash
+# Dim/restore backlight + keyboard RGB for Omarchy idle.dim (Quickshell IdleMonitor).
+set -euo pipefail
+DEV=dp_aux_backlight
+DIM_PCT=25
+STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/omarchy-idle-dim.state"
+KBD_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/kbd-backlight"
+# root may call us; prefer hurly home for prefs
+if [[ ! -f $KBD_STATE && -f /home/hurly/.local/state/omarchy/kbd-backlight ]]; then
+  KBD_STATE=/home/hurly/.local/state/omarchy/kbd-backlight
+fi
+
+cur() { brightnessctl -d "$DEV" get; }
+max() { brightnessctl -d "$DEV" max; }
+setb() { brightnessctl -d "$DEV" -q set "$1"; }
+
+read_kbd_field() {
+  # $1 = field name, $2 = default
+  local field="$1" default="$2" val=""
+  if [[ -f $KBD_STATE ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      val=$(jq -r --arg f "$field" --arg d "$default" '.[$f] // $d' "$KBD_STATE" 2>/dev/null || echo "$default")
+    else
+      val=$(sed -n "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$KBD_STATE" | head -1)
+      if [[ -z $val ]]; then
+        val=$(sed -n "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\\(true\\|false\\).*/\\1/p" "$KBD_STATE" | head -1)
+      fi
+    fi
+  fi
+  [[ -n $val && $val != null ]] || val="$default"
+  printf '%s' "$val"
+}
+
+kbd_off() {
+  local auto_off
+  auto_off=$(read_kbd_field auto_off true)
+  if [[ $auto_off == "false" ]]; then
+    logger -t omarchy-idle-dim "kbd off skip (auto_off=false)"
+    return 0
+  fi
+  if command -v x1e-ec-tool >/dev/null 2>&1; then
+    x1e-ec-tool kb '#000000' >/dev/null 2>&1 || true
+    logger -t omarchy-idle-dim "kbd off #000000"
+  fi
+}
+
+kbd_restore() {
+  local hex enabled
+  hex=$(read_kbd_field hex "#ffffff")
+  enabled=$(read_kbd_field enabled true)
+  if [[ $enabled != "true" ]]; then
+    logger -t omarchy-idle-dim "kbd restore skip (enabled=$enabled)"
+    return 0
+  fi
+  if command -v x1e-ec-tool >/dev/null 2>&1; then
+    x1e-ec-tool kb "$hex" >/dev/null 2>&1 || true
+    logger -t omarchy-idle-dim "kbd restore $hex"
+  fi
+}
+
+cmd=${1:-}
+case "$cmd" in
+  dim)
+    saved=$(cur)
+    maxb=$(max)
+    target=$(( maxb * DIM_PCT / 100 ))
+    (( target < 1 )) && target=1
+    if (( target >= saved )); then
+      echo "$saved" > "$STATE"
+      logger -t omarchy-idle-dim "dim skip (already <=${DIM_PCT}%): $saved"
+    else
+      echo "$saved" > "$STATE"
+      setb "$target"
+      logger -t omarchy-idle-dim "dim ${saved}->${target} (${DIM_PCT}% of ${maxb})"
+    fi
+    kbd_off
+    ;;
+  restore)
+    if [[ -f $STATE ]]; then
+      saved=$(cat "$STATE")
+      setb "$saved"
+      rm -f "$STATE"
+      logger -t omarchy-idle-dim "restore $saved"
+    fi
+    kbd_restore
+    ;;
+  *)
+    echo "usage: $0 dim|restore" >&2
+    exit 2
+    ;;
+esac

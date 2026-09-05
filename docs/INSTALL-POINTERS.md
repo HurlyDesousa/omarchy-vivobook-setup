@@ -1,105 +1,34 @@
-# Install pointers (live AsusLaptop, 2026-09-05)
+# Install pointers (live capture 2026-09-05)
 
-Pinned versions/commits that the live Vivobook S15 (`S5507QA`, Snapdragon X Elite, Omarchy ARM) was running when the inventory was taken. Restore to these first; upgrade afterwards on purpose, not by accident.
+Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sources.
 
-| Component | Pin | Source |
-|-----------|-----|--------|
-| omarchy-task-manager | commit `1e63b1f` (0.5.5-7) | [HurlyDesousa/omarchy-task-manager@1e63b1f](https://github.com/HurlyDesousa/omarchy-task-manager/commit/1e63b1f4fc7f347d94b4837625b53588495a27af) |
-| Cursor (linux-arm64) | stable via download API | `https://cursor.com/api/download?platform=linux-arm64&releaseTrack=stable` |
-| llama.cpp | release `b10819` | [ggml-org/llama.cpp b10819](https://github.com/ggml-org/llama.cpp/releases/tag/b10819) |
-| x1e-ec-tool | commit `ce572b3` | local build; see below |
-| pi (coding agent) | `0.85.1`, provider `llama-local` | npm `@mariozechner/pi-coding-agent` |
+## omarchy-task-manager (TM)
+- Repo: https://github.com/HurlyDesousa/omarchy-task-manager
+- Install SHA (live HEAD): `1e63b1f4fc7f347d94b4837625b53588495a27af` (short `1e63b1f`)
+- Local checkout used: `~/src/omarchy-task-manager/`
+- Install: run repo `install.sh` (ships `~/.local/bin/omarchy-task-manager*` + plugins under `~/.config/omarchy/plugins/sw.art.task-manager/`)
 
-## omarchy-task-manager @ `1e63b1f`
+## Cursor IDE (AppImage — exclude binary from tarball)
+- Live: `~/.local/opt/cursor/Cursor-3.19.13-aarch64.AppImage` (~282M) → symlink `~/.local/bin/cursor`
+- Prefer Cursor download API / official aarch64 AppImage for Linux ARM64 rather than copying the AppImage
+- Desktop entry: `~/.local/share/applications/cursor.desktop`
+- Cursor download/API: use Cursor product download endpoints for Linux ARM64 AppImage (version pinned live: 3.19.13)
 
-```bash
-git clone https://github.com/HurlyDesousa/omarchy-task-manager.git
-cd omarchy-task-manager
-git checkout 1e63b1f
-./install.sh
-omarchy-restart-shell
-```
+## llama.cpp b10819
+- Live unpack: `~/.local/share/llama.cpp/` (~62M) — re-download preferred
+- Cache tarball seen: `~/.cache/llama-b10819-bin-ubuntu-arm64.tar.gz`
+- Upstream release URL: `https://github.com/ggerganov/llama.cpp/releases/download/b10819/llama-b10819-bin-ubuntu-arm64.tar.gz`
+  (verify asset name on the b10819 release page if 404)
+- Wrappers: `~/.local/bin/llama-server`, `llama-cli`, `llama-bench` → `~/.local/share/llama.cpp/run`
+- Omarchy wrapper unit: `configs/bin/omarchy-llama-server` + `configs/systemd/user/omarchy-llama-server.service`
+- **GGUF excluded** — use `scripts/fetch-gguf.sh` / `docs/GGUF.md`; live model was `~/.local/share/llm/Qwen2.5-3B-Instruct-Q4_K_M.gguf`
 
-`install.sh` at this commit installs `~/.local/bin/omarchy-task-manager{,-toggle,-waybar}`, the desktop entry, the marked `-- omarchy-task-manager begin/end` block in `~/.config/hypr/autostart.lua` (see `configs/hypr/autostart.lua.fragment`), and the two Quickshell plugins `sw.art.task-manager` and `sw.art.kbd-backlight` under `~/.config/omarchy/plugins/`. It patches `~/.config/omarchy/shell.json` to place `sw.art.task-manager` after `omarchy.weather` and `sw.art.kbd-backlight` left of `omarchy.clock` (matches `configs/omarchy/shell.json.fragment`).
+## x1e-ec-tool (NEVER stop the service)
+- Local checkout: `~/src/x1e-ec-tool/` HEAD `ce572b3b9ab3aa8e116dbc286e52759c331842a5` (icecream95 upstream)
+- Install path: run `install.sh` from that tree → installs to `/usr/local` (`/usr/local/bin/x1e-ec-tool`, systemd unit under `/usr/local/lib/systemd/system/x1e-ec-tool.service`)
+- Hard rule: do **not** reboot / stop `x1e-ec-tool` / kill kbuild while restoring
 
-## Cursor (linux-arm64)
-
-Cursor publishes the current build through a JSON API; do not hardcode an AppImage URL.
-
-```bash
-json="$(curl -fsSL 'https://cursor.com/api/download?platform=linux-arm64&releaseTrack=stable')"
-url="$(printf '%s' "$json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["downloadUrl"])')"
-mkdir -p ~/.local/bin ~/.local/opt/cursor
-curl -fL -o ~/.local/opt/cursor/Cursor.AppImage "$url"
-chmod +x ~/.local/opt/cursor/Cursor.AppImage
-ln -sf ~/.local/opt/cursor/Cursor.AppImage ~/.local/bin/cursor
-```
-
-The API also returns `version`, `commitSha`, `rehUrl` (remote server tarball), and on the stable track `debUrl`/`rpmUrl`. At inventory time it returned Cursor `3.19.13` (`dd066f33…`). Re-authenticate afterwards (OAuth; see `docs/SECRETS.md`).
-
-## llama.cpp `b10819`
-
-Prebuilt arm64 Linux assets exist for this tag: `llama-b10819-bin-ubuntu-arm64.tar.gz` (CPU) and `llama-b10819-bin-ubuntu-vulkan-arm64.tar.gz` (Vulkan, Adreno). Ubuntu builds link against glibc and generally run on Arch ARM; build from source if they do not.
-
-```bash
-tag=b10819
-curl -fL -o /tmp/llama.tar.gz \
-  "https://github.com/ggml-org/llama.cpp/releases/download/${tag}/llama-${tag}-bin-ubuntu-arm64.tar.gz"
-mkdir -p ~/.local/opt/llama.cpp && tar -xzf /tmp/llama.tar.gz -C ~/.local/opt/llama.cpp --strip-components=1
-ln -sf ~/.local/opt/llama.cpp/llama-server ~/.local/bin/llama-server
-```
-
-Source build alternative:
-
-```bash
-git clone https://github.com/ggml-org/llama.cpp.git && cd llama.cpp && git checkout b10819
-cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)" --target llama-server
-install -Dm755 build/bin/llama-server ~/.local/bin/llama-server
-```
-
-`omarchy-llama-server` listens on `127.0.0.1:8080` via `configs/systemd/user/omarchy-llama-server.service` (stub — paste verbatim ExecStart from AsusLaptop); the served model alias is `local` (what `configs/pi/models.json` expects). Weights: `docs/GGUF.md`.
-
-## x1e-ec-tool @ `ce572b3`
-
-Fan control and keyboard RGB on Snapdragon X Elite laptops through the embedded controller. Installed as `/usr/local/bin/x1e-ec-tool` plus the system unit `x1e-ec-tool.service`. **Never stop the service** once running; both the task manager fan profiles and the kbd-backlight plugin depend on it.
-
-Commit `ce572b3` is the checkout that was live on the laptop. It does not resolve on the public upstream fetched during this inventory, so it is either a local/private commit or a fork; confirm the remote with `git -C <checkout> remote -v` on the laptop before relying on it. Upstream reference: [x1e-ec-tool](https://github.com/artem-senatorov/x1e-ec-tool).
-
-**Live install path on AsusLaptop:**
-
-```bash
-~/src/x1e-ec-tool/install.sh
-```
-
-Manual clone/build (if not already at `~/src/x1e-ec-tool`):
-
-```bash
-git clone <x1e-ec-tool remote> ~/src/x1e-ec-tool && cd ~/src/x1e-ec-tool && git checkout ce572b3
-~/src/x1e-ec-tool/install.sh
-# then:
-sudo systemctl enable --now x1e-ec-tool.service
-sudo usermod -aG i2c hurly   # kbd-backlight and fan profiles call the tool without sudo
-```
-
-## pi `0.85.1` with `llama-local`
-
-```bash
-npm install -g @mariozechner/pi-coding-agent@0.85.1   # or via mise: mise use -g npm:@mariozechner/pi-coding-agent@0.85.1
-```
-
-Config lives in `~/.pi/agent/`:
-
-| File | Repo source | Note |
-|------|-------------|------|
-| `~/.pi/agent/models.json` | `configs/pi/models.json` | provider `llama-local` → `http://127.0.0.1:8080/v1` |
-| `~/.pi/agent/settings.json` | `configs/pi/settings.json.defaults` | copied only if missing; `defaultProvider: llama-local`, `defaultModel: local` |
-
-`apiKey` in `models.json` is a dummy value (`llama-local`); llama-server ignores it, but pi hides keyless models from `/model` without one. Never commit `~/.pi/agent/auth.json` or anything else under `~/.pi/`.
-
-Smoke test:
-
-```bash
-systemctl --user start omarchy-llama-server.service
-curl -s http://127.0.0.1:8080/v1/models
-pi --model llama-local/local -p 'say hi'
-```
+## Quickshell system patches (wiped by Omarchy update)
+- Idle dim: apply `configs/quickshell/idle.patch` to `/usr/share/omarchy/shell/plugins/services/idle/Service.qml`
+- Lock lid harden: apply `configs/quickshell/lock-lidharden.patch` to `/usr/share/omarchy/shell/plugins/lock/Service.qml`
+- Re-apply via `configs/omarchy/hooks/restore-idle-dim.hook` (and planned lock hook example)
