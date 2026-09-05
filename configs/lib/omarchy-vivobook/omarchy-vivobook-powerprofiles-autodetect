@@ -1,0 +1,6 @@
+#!/bin/bash
+# Called on boot (via omarchy-powerprofiles-init) and on AC plug/unplug (udev).
+export PATH=/usr/share/omarchy/bin:/usr/bin:/usr/local/bin:$PATH
+export HOME=/home/hurly
+export OMARCHY_POWERPROFILES_STATE_DIR=/home/hurly/.local/state/omarchy/powerprofiles
+exec /usr/share/omarchy/bin/omarchy-powerprofiles-set autodetect

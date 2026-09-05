@@ -38,8 +38,8 @@ Panel {
     }
   }
 
-  function selectProfileByDelta(delta) {
-    profileIndex = Model.selectProfileIndex(profileIndex, delta, profiles)
+  function selectProfileByDelta(deltaX, deltaY) {
+    profileIndex = Model.selectProfileGridIndex(profileIndex, deltaX, deltaY, profiles, 2)
   }
 
   function activateSelectedProfile() {
@@ -304,8 +304,7 @@ Panel {
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
-        if (dx !== 0) root.selectProfileByDelta(dx)
-        else if (dy !== 0) root.selectProfileByDelta(dy)
+        root.selectProfileByDelta(dx, dy)
       }
       onActivateRequested: if (root.cursorActive) root.activateSelectedProfile()
       onCloseRequested: root.close()
@@ -463,37 +462,56 @@ Panel {
             fontFamily: root.bar.fontFamily
           }
 
-          Row {
-            id: profileRow
+          Column {
+            id: profileGrid
             width: parent.width
             spacing: Style.space(6)
 
-            readonly property real cellWidth: root.profiles.length > 0
-              ? (width - spacing * (root.profiles.length - 1)) / root.profiles.length
-              : 0
+            readonly property var ordered: root.profiles
+            readonly property int columns: 2
 
             Repeater {
-              model: root.profiles
-              Button {
-                required property var modelData
+              model: profileGrid.ordered.length > 0
+                ? Math.ceil(profileGrid.ordered.length / profileGrid.columns)
+                : 0
+
+              Row {
                 required property int index
-                width: profileRow.cellWidth
-                iconText: root.profileIcon(String(modelData))
-                iconSize: Style.font.title
-                text: Model.profileLabel(String(modelData))
-                fontSize: Style.font.bodySmall
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-                bordered: true
-                active: root.activeProfile === modelData
-                hasCursor: root.cursorActive && root.profileIndex === index
-                onClicked: root.setProfile(modelData)
-                onHovered: function(h) {
-                  if (h) {
-                    root.cursorActive = true
-                    root.profileIndex = index
+                width: profileGrid.width
+                spacing: Style.space(6)
+
+                readonly property real cellWidth: (width - spacing * (profileGrid.columns - 1)) / profileGrid.columns
+
+                Repeater {
+                  model: profileGrid.columns
+
+                  Button {
+                    required property int index
+                    property int gridIndex: parent.index * profileGrid.columns + index
+                    property string profileName: gridIndex < profileGrid.ordered.length
+                      ? String(profileGrid.ordered[gridIndex])
+                      : ""
+
+                    visible: profileName !== ""
+                    width: parent.cellWidth
+                    iconText: root.profileIcon(profileName)
+                    iconSize: Style.font.title
+                    text: Model.profileLabel(profileName)
+                    fontSize: Style.font.bodySmall
+                    foreground: root.bar.foreground
+                    fontFamily: root.bar.fontFamily
+                    horizontalPadding: Style.spacing.controlPaddingX
+                    verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+                    bordered: true
+                    active: root.activeProfile === profileName
+                    hasCursor: root.cursorActive && root.profileIndex === gridIndex
+                    onClicked: root.setProfile(profileName)
+                    onHovered: function(h) {
+                      if (h && profileName) {
+                        root.cursorActive = true
+                        root.profileIndex = gridIndex
+                      }
+                    }
                   }
                 }
               }

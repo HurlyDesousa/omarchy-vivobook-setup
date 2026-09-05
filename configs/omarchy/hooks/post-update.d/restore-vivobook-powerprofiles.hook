@@ -5,3 +5,6 @@ SHARE_BIN=/usr/share/omarchy/bin
 [[ -x "$LIB/omarchy-powerprofiles-list" && -x "$LIB/omarchy-powerprofiles-set" ]] || exit 0
 ln -sfn "$LIB/omarchy-powerprofiles-list" "$SHARE_BIN/omarchy-powerprofiles-list"
 ln -sfn "$LIB/omarchy-powerprofiles-set" "$SHARE_BIN/omarchy-powerprofiles-set"
+if [[ ! -f /etc/udev/rules.d/99-omarchy-vivobook-powerprofiles.rules ]]; then
+  echo "missing udev rule — re-run Omarchy Master powerprofiles install" >&2
+fi

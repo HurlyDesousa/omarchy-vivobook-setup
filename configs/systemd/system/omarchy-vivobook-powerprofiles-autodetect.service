@@ -1,0 +1,11 @@
+[Unit]
+Description=Vivobook power profile autodetect (AC→performance, battery→power-saver)
+After=upower.service
+Wants=upower.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/omarchy-vivobook-powerprofiles-autodetect
+
+[Install]
+WantedBy=multi-user.target

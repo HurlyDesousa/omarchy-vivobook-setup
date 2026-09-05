@@ -108,6 +108,35 @@ ensure_state_dir() {
   ok "State dir: ${dir}"
 }
 
+install_system_file() {
+  local src="$1"
+  local dest="$2"
+  local label="$3"
+  local mode="${4:-644}"
+
+  if [[ ! -f "${src}" ]]; then
+    warn "Missing inventory file: ${src} (${label})"
+    return 0
+  fi
+
+  if [[ -f "${dest}" ]] && cmp -s "${src}" "${dest}"; then
+    ok "Already applied: ${label}"
+    return 0
+  fi
+
+  if [[ -w "$(dirname "${dest}")" ]]; then
+    cp "${src}" "${dest}"
+    chmod "${mode}" "${dest}" 2>/dev/null || true
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo cp "${src}" "${dest}"
+    sudo chmod "${mode}" "${dest}" 2>/dev/null || true
+  else
+    warn "Cannot install ${label} → ${dest} (sudo required)"
+    return 1
+  fi
+  ok "${label}"
+}
+
 # --- main --------------------------------------------------------------------
 
 main() {
@@ -282,6 +311,43 @@ main() {
     chmod +x "${VIVOBOOK_LIB}/${script}" 2>/dev/null || true
   done
   ensure_state_dir "${HOME}/.local/state/omarchy/powerprofiles"
+
+  install_system_file \
+    "${CONFIGS_DIR}/lib/omarchy-vivobook/omarchy-vivobook-powerprofiles-autodetect" \
+    "/usr/local/bin/omarchy-vivobook-powerprofiles-autodetect" \
+    "vivobook autodetect → /usr/local/bin" \
+    "755"
+  install_system_file \
+    "${CONFIGS_DIR}/udev/99-omarchy-vivobook-powerprofiles.rules" \
+    "/etc/udev/rules.d/99-omarchy-vivobook-powerprofiles.rules" \
+    "udev 99-omarchy-vivobook-powerprofiles.rules"
+  install_system_file \
+    "${CONFIGS_DIR}/systemd/system/omarchy-vivobook-powerprofiles-autodetect.service" \
+    "/etc/systemd/system/omarchy-vivobook-powerprofiles-autodetect.service" \
+    "systemd omarchy-vivobook-powerprofiles-autodetect.service"
+
+  if command -v systemctl >/dev/null 2>&1; then
+    if [[ -w /etc/systemd/system ]] || command -v sudo >/dev/null 2>&1; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo systemctl daemon-reload 2>/dev/null || warn "systemctl daemon-reload failed"
+        sudo systemctl enable omarchy-vivobook-powerprofiles-autodetect.service 2>/dev/null \
+          || warn "Could not enable omarchy-vivobook-powerprofiles-autodetect.service"
+      else
+        systemctl daemon-reload 2>/dev/null || warn "systemctl daemon-reload failed"
+        systemctl enable omarchy-vivobook-powerprofiles-autodetect.service 2>/dev/null \
+          || warn "Could not enable omarchy-vivobook-powerprofiles-autodetect.service"
+      fi
+    fi
+    if command -v udevadm >/dev/null 2>&1; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo udevadm control --reload-rules 2>/dev/null || true
+        sudo udevadm trigger --subsystem-match=power_supply 2>/dev/null || true
+      else
+        udevadm control --reload-rules 2>/dev/null || true
+        udevadm trigger --subsystem-match=power_supply 2>/dev/null || true
+      fi
+    fi
+  fi
 
   PP_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-powerprofiles.hook"
   if [[ -x "${PP_HOOK}" ]]; then
