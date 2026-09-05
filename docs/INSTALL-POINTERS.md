@@ -57,9 +57,13 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)" --
 install -Dm755 build/bin/llama-server ~/.local/bin/llama-server
 ```
 
-`omarchy-llama-server` listens on `127.0.0.1:8080` via `configs/systemd/user/omarchy-llama-server.service` (verbatim from AsusLaptop); wrapper at `~/.local/bin/omarchy-llama-server` with `LLAMA_THREADS=10`, `LLAMA_CTX=8192`, `LD_LIBRARY_PATH=%h/.local/share/llama.cpp/run`. Model alias `local` (what `configs/pi/models.json` expects). Weights: `docs/GGUF.md`.
+`omarchy-llama-server` listens on `127.0.0.1:8080` via `configs/systemd/user/omarchy-llama-server.service` (verbatim from AsusLaptop); wrapper `configs/bin/omarchy-llama-server` → `~/.local/bin/omarchy-llama-server` with `LLAMA_THREADS=10`, `LLAMA_CTX=32768`, `LLAMA_N_PREDICT=-1`, `LD_LIBRARY_PATH=%h/.local/share/llama.cpp/run`. The wrapper runs llama-server in router mode over `~/.local/share/llm` (`--models-dir`); set `LLAMA_SINGLE_MODEL=1` for the single `Qwen2.5-3B-Instruct-Q4_K_M.gguf`. Model id `Qwen2.5-3B-Instruct-Q4_K_M` (what `configs/pi/models.json` expects). Weights: `docs/GGUF.md`.
 
-Battery idle suspend: `configs/systemd/user/battery-idle-suspend.service` runs `~/.local/bin/omarchy-battery-idle-suspend.sh` (1 hour idle on battery only).
+Battery idle suspend: `configs/systemd/user/battery-idle-suspend.service` runs `configs/bin/omarchy-battery-idle-suspend.sh` → `~/.local/bin/omarchy-battery-idle-suspend.sh` (1 hour idle on battery only; honors the shell's stay-awake indicator).
+
+Idle dim: `configs/bin/omarchy-idle-dim` → `~/.local/bin/omarchy-idle-dim` dims `dp_aux_backlight` to 25% and turns the keyboard RGB off (unless `auto_off=false` in `~/.local/state/omarchy/kbd-backlight`), restoring both afterwards. Called from the patched Quickshell idle `Service.qml` (`configs/share/idle-Service.qml`, diff in `configs/quickshell/idle.patch`).
+
+Live helper/unit/hook byte sizes are recorded in `docs/live-2026-09-05/MANIFEST-live-20260905.txt`.
 
 ## x1e-ec-tool @ `ce572b3`
 
@@ -94,14 +98,14 @@ Config lives in `~/.pi/agent/`:
 | File | Repo source | Note |
 |------|-------------|------|
 | `~/.pi/agent/models.json` | `configs/pi/models.json` | provider `llama-local` → `http://127.0.0.1:8080/v1` |
-| `~/.pi/agent/settings.json` | `configs/pi/settings.json.defaults` | copied only if missing; `defaultProvider: llama-local`, `defaultModel: local` |
+| `~/.pi/agent/settings.json` | `configs/pi/settings.json.defaults` | copied only if missing; `defaultProvider: llama-local`, default model `Qwen2.5-3B-Instruct-Q4_K_M` |
 
-`apiKey` in `models.json` is a dummy value (`llama-local`); llama-server ignores it, but pi hides keyless models from `/model` without one. Never commit `~/.pi/agent/auth.json` or anything else under `~/.pi/`.
+`apiKey` in `models.json` is a dummy value (`local`); llama-server ignores it, but pi hides keyless models from `/model` without one. Never commit `~/.pi/agent/auth.json` or anything else under `~/.pi/`.
 
 Smoke test:
 
 ```bash
 systemctl --user start omarchy-llama-server.service
 curl -s http://127.0.0.1:8080/v1/models
-pi --model llama-local/local -p 'say hi'
+pi --model llama-local/Qwen2.5-3B-Instruct-Q4_K_M -p 'say hi'
 ```

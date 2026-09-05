@@ -1,0 +1,14 @@
+76\tINSTALL-POINTERS.md
+1596\tconfigs/bin/omarchy-battery-idle-suspend.sh
+2698\tconfigs/bin/omarchy-idle-dim
+1277\tconfigs/bin/omarchy-llama-server
+4130\tconfigs/omarchy/hooks/post-update.d/restore-idle-dim.hook
+1481\tconfigs/omarchy/shell.json
+707\tconfigs/pi/models.json
+6079\tconfigs/quickshell/idle.patch
+1579\tconfigs/quickshell/lock-lidharden.patch
+13672\tconfigs/share/idle-Service.qml
+101\tconfigs/state/kbd-backlight.json
+280\tconfigs/systemd/user/battery-idle-suspend.service
+470\tconfigs/systemd/user/omarchy-llama-server.service
+89\tdocs/INVENTORY.md

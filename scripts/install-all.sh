@@ -93,13 +93,21 @@ apply_patch_if_present() {
     return 0
   fi
 
-  if patch --dry-run -R -p1 -d "$(dirname "${target}")" < "${patch}" >/dev/null 2>&1; then
+  # Live patches carry absolute /usr/share/... headers, so name the target explicitly.
+  if patch --dry-run -R "${target}" < "${patch}" >/dev/null 2>&1; then
     ok "Patch already applied: ${label}"
     return 0
   fi
 
   info "Applying patch: ${label}"
-  patch -p1 -d "$(dirname "${target}")" < "${patch}" || warn "Patch failed for ${label}; resolve manually."
+  patch "${target}" < "${patch}" || warn "Patch failed for ${label}; resolve manually."
+}
+
+install_bin() {
+  local src="$1"
+  local dest="${HOME}/.local/bin/$(basename "${src}")"
+  apply_fragment "${src}" "${dest}" "bin $(basename "${src}")"
+  chmod +x "${dest}" 2>/dev/null || true
 }
 
 ensure_state_dir() {
@@ -195,7 +203,19 @@ main() {
   fi
   echo
 
-  # 6. systemd user units
+  # 6. ~/.local/bin helpers referenced by the user units and idle hook
+  info "=== ~/.local/bin helpers ==="
+  if [[ -d "${CONFIGS_DIR}/bin" ]]; then
+    for bin in "${CONFIGS_DIR}"/bin/*; do
+      [[ -f "${bin}" ]] || continue
+      install_bin "${bin}"
+    done
+  else
+    warn "No configs/bin/ — TODO: INVENTORY"
+  fi
+  echo
+
+  # 6b. systemd user units
   info "=== systemd user units ==="
   if [[ -d "${CONFIGS_DIR}/systemd/user" ]]; then
     mkdir -p "${HOME}/.config/systemd/user"
@@ -214,13 +234,23 @@ main() {
   info "=== Quickshell QML patches ==="
   # restore-idle-dim.hook forces dim=180 lock=300 screensaver=400; honors kbd auto_off;
   # never stops x1e-ec-tool (see configs/omarchy/hooks/post-update.d/restore-idle-dim.hook)
+  # The hook re-copies the fully patched Service.qml from ~/.local/share/omarchy/idle-dim/
+  # after every omarchy update, so stage that copy first.
+  apply_fragment \
+    "${CONFIGS_DIR}/share/idle-Service.qml" \
+    "${HOME}/.local/share/omarchy/idle-dim/Service.qml" \
+    "idle-dim patched Service.qml (hook source)"
+
   if [[ -f "${CONFIGS_DIR}/quickshell/idle.patch" ]]; then
-    # Target path is placeholder until inventory confirms install location
-    QS_IDLE_TARGET="${HOME}/.config/quickshell/idle.qml"
-    apply_patch_if_present \
-      "${CONFIGS_DIR}/quickshell/idle.patch" \
-      "${QS_IDLE_TARGET}" \
-      "quickshell idle policy"
+    QS_IDLE_TARGET="/usr/share/omarchy/shell/plugins/services/idle/Service.qml"
+    if [[ -w "${QS_IDLE_TARGET}" ]]; then
+      apply_patch_if_present \
+        "${CONFIGS_DIR}/quickshell/idle.patch" \
+        "${QS_IDLE_TARGET}" \
+        "quickshell idle dim policy"
+    else
+      warn "idle target ${QS_IDLE_TARGET} not writable — restore-idle-dim.hook copies the patched QML after the next omarchy update (or apply with sudo)"
+    fi
   else
     warn "No configs/quickshell/idle.patch — TODO: INVENTORY"
   fi

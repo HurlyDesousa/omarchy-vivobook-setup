@@ -11,7 +11,8 @@ RestartSec=3
 Environment=LLAMA_HOST=127.0.0.1
 Environment=LLAMA_PORT=8080
 Environment=LLAMA_THREADS=10
-Environment=LLAMA_CTX=8192
+Environment=LLAMA_CTX=32768
+Environment=LLAMA_N_PREDICT=-1
 Environment=LD_LIBRARY_PATH=%h/.local/share/llama.cpp/run
 
 [Install]

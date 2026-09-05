@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+RUN="${LLAMA_RUN_DIR:-$HOME/.local/share/llama.cpp/run}"
+export LD_LIBRARY_PATH="$RUN${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+unset GGML_BACKEND_PATH
+export PATH="$HOME/.local/bin:$PATH"
+
+LLAMA_BIN="${LLAMA_BIN:-$RUN/llama-server}"
+MODELS_DIR="${LLAMA_MODELS_DIR:-$HOME/.local/share/llm}"
+HOST="${LLAMA_HOST:-127.0.0.1}"
+PORT="${LLAMA_PORT:-8080}"
+THREADS="${LLAMA_THREADS:-10}"
+CTX="${LLAMA_CTX:-32768}"
+NPREDICT="${LLAMA_N_PREDICT:--1}"
+SINGLE="${LLAMA_SINGLE_MODEL:-0}"
+MODEL_FILE="${LLAMA_MODEL:-$MODELS_DIR/Qwen2.5-3B-Instruct-Q4_K_M.gguf}"
+
+[[ -x "$LLAMA_BIN" ]] || { echo "missing $LLAMA_BIN" >&2; exit 1; }
+[[ -d "$MODELS_DIR" ]] || { echo "missing $MODELS_DIR" >&2; exit 1; }
+
+args=(--host "$HOST" --port "$PORT" --threads "$THREADS" --ctx-size "$CTX" --n-predict "$NPREDICT" --jinja)
+if [[ "$SINGLE" == "1" ]]; then
+  [[ -f "$MODEL_FILE" ]] || { echo "missing $MODEL_FILE" >&2; exit 1; }
+  args+=(--model "$MODEL_FILE")
+  echo "Starting llama-server SINGLE model=$MODEL_FILE host=$HOST:$PORT threads=$THREADS ctx=$CTX n_predict=$NPREDICT"
+else
+  args+=(--models-dir "$MODELS_DIR")
+  echo "Starting llama-server ROUTER models-dir=$MODELS_DIR host=$HOST:$PORT threads=$THREADS ctx=$CTX n_predict=$NPREDICT"
+fi
+exec "$LLAMA_BIN" "${args[@]}"

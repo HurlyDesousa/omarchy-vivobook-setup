@@ -2,7 +2,7 @@
 
 Durable restore repo for Toby's **ASUS Vivobook S15** (`S5507QA`, Snapdragon X Elite) Omarchy Hyprland customizations after a fresh Omarchy ARM reinstall.
 
-> **Inventory pending:** Omarchy Master will send a live inventory dump soon. Files under `configs/` marked with `TODO: INVENTORY` are placeholders until that merge. See [Inventory merge](#inventory-merge-todo) below.
+> **Inventory status:** the live AsusLaptop fragment dump (2026-09-05) has been merged byte-exact under `configs/` — see [docs/INVENTORY-live-2026-09-05.md](docs/INVENTORY-live-2026-09-05.md) for the per-file table and what is still pending. Remaining `TODO: INVENTORY` markers cover only the items listed there.
 
 ## Hardware
 
@@ -102,11 +102,18 @@ scripts/
   install-all.sh          # idempotent orchestrator
   fetch-gguf.sh           # download GGUF weights (not committed)
 configs/
+  bin/                    # ~/.local/bin helpers (llama-server wrapper, idle-dim, battery suspend)
   hypr/                   # Hyprland snippets
-  omarchy/                # shell.json fragments, plugin stubs
-  systemd/                # user unit fragments
-  quickshell/             # QML patch files
+  omarchy/                # shell.json, post-update hooks
+  pi/                     # ~/.pi/agent models.json + settings defaults
+  quickshell/             # QML patch files (idle dim, lock lid-harden)
+  share/                  # fully patched idle Service.qml (hook copy source)
+  state/                  # kbd-backlight JSON state default
+  systemd/                # user units
 docs/
+  INVENTORY-live-2026-09-05.md  # what was merged from the live laptop, what is pending
+  INSTALL-POINTERS.md     # version pins and install recipes
+  live-2026-09-05/        # verbatim manifest + docs from the fragment tarball
   SECRETS.md              # re-auth checklist (no secrets in repo)
   GGUF.md                 # model download docs
   REPOS.md                # related repo pointers

@@ -1,6 +1,6 @@
 {
   "defaultProvider": "llama-local",
-  "defaultModel": "local",
+  "defaultModel": "Qwen2.5-3B-Instruct-Q4_K_M",
   "defaultThinkingLevel": "off",
   "theme": "dark",
   "enableInstallTelemetry": false,
