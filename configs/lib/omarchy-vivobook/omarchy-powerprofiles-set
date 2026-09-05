@@ -1,0 +1,56 @@
+#!/bin/bash
+# Vivobook: PPD + x1e-ec-tool fan profile mapping. Never stops x1e-ec-tool.service.
+set -euo pipefail
+REAL=/usr/bin/omarchy-powerprofiles-set
+EC=/usr/local/bin/x1e-ec-tool
+PPCTL=/usr/bin/powerprofilesctl
+if [[ -n "${OMARCHY_POWERPROFILES_STATE_DIR:-}" ]]; then
+  STATE_DIR="$OMARCHY_POWERPROFILES_STATE_DIR"
+elif [[ -d /home/hurly/.local/state/omarchy/powerprofiles ]]; then
+  STATE_DIR=/home/hurly/.local/state/omarchy/powerprofiles
+else
+  STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/powerprofiles"
+fi
+MODE_FILE="$STATE_DIR/vivobook-mode"
+
+usage() { echo "Usage: omarchy-powerprofiles-set [autodetect|ac|battery] [power-saver|balanced|performance|full-speed]" >&2; exit 1; }
+action="${1:-}"; requested="${2:-}"
+[[ -n $action ]] || usage
+case "$action" in
+  autodetect)
+    if [[ $(busctl get-property org.freedesktop.UPower /org/freedesktop/UPower org.freedesktop.UPower OnBattery 2>/dev/null) == "b true" ]]; then action=battery; else action=ac; fi ;;
+  ac|battery) ;;
+  *) usage ;;
+esac
+mkdir -p "$STATE_DIR"
+[[ -z ${requested:-} && -r $MODE_FILE ]] && requested=$(tr -d '\r\n' <"$MODE_FILE")
+
+ppd=""; ec_idx=""
+case "${requested:-}" in
+  power-saver) ppd=power-saver; ec_idx=0 ;;
+  balanced)    ppd=balanced;    ec_idx=1 ;;
+  performance) ppd=balanced;    ec_idx=2 ;;
+  full-speed)  ppd=balanced;    ec_idx=3 ;;
+  "") exec "$REAL" "$action" ;;
+  *) echo "Power profile is not available: $requested" >&2; exit 1 ;;
+esac
+
+set +e
+if [[ "$requested" == "power-saver" || "$requested" == "balanced" ]]; then
+  "$REAL" "$action" "$ppd"; ppd_rc=$?
+else
+  "$PPCTL" set "$ppd"; ppd_rc=$?
+  printf '%s\n' "$ppd" >"$STATE_DIR/$action"
+fi
+set -e
+
+if [[ -x "$EC" ]]; then
+  "$EC" mode auto >/dev/null 2>&1 || true
+  "$EC" profile "$ec_idx"
+fi
+printf '%s\n' "$requested" >"$MODE_FILE"
+chown hurly:hurly "$MODE_FILE" 2>/dev/null || true
+if [[ ${ppd_rc:-0} -ne 0 ]]; then
+  echo "warning: PPD set failed (rc=$ppd_rc); EC profile $ec_idx applied; vivobook-mode=$requested" >&2
+fi
+exit 0

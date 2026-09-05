@@ -1,0 +1,27 @@
+#!/bin/bash
+# Omarchy post-update hook: re-apply Vivobook power panel QML polish overlay.
+set -euo pipefail
+
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+OVERLAY="${REPO_ROOT}/configs/omarchy/overlays/panels/power"
+TARGET="/usr/share/omarchy/shell/plugins/panels/power"
+
+[[ -d "${OVERLAY}" ]] || exit 0
+
+copy_overlay() {
+  local src="$1"
+  local dest="$2"
+  if [[ -w "${TARGET}" ]]; then
+    cp "${src}" "${dest}"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo cp "${src}" "${dest}"
+  else
+    echo "restore-vivobook-power-panel.hook: cannot write ${dest} — run with sudo" >&2
+    return 1
+  fi
+}
+
+for f in Panel.qml Model.js; do
+  [[ -f "${OVERLAY}/${f}" ]] || continue
+  copy_overlay "${OVERLAY}/${f}" "${TARGET}/${f}" || exit 1
+done
