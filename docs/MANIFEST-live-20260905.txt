@@ -1,12 +1,13 @@
-live-inventory-manifest 2026-09-05
-======= configs (18)
+# Fragment dump manifest 2026-09-05T23:10:55+02:00
+## Included
+MANIFEST.txt
 configs/bin/omarchy-battery-idle-suspend.sh
 configs/bin/omarchy-idle-dim
 configs/bin/omarchy-llama-server
 configs/hypr/autostart.lua.fragment
 configs/hypr/input.lua.fragment
-configs/omarchy/hooks/post-update.d/restore-idle-dim.hook
-configs/omarchy/hooks/post-update.d/restore-lock-lidharden.hook
+configs/omarchy/hooks/restore-idle-dim.hook
+configs/omarchy/hooks/restore-lock-lidharden.hook.example
 configs/omarchy/shell.json.fragment
 configs/pi/models.json
 configs/pi/settings.json.defaults
@@ -15,7 +16,12 @@ configs/quickshell/lock-lidharden.patch
 configs/state/kbd-backlight.json.default
 configs/systemd/user/battery-idle-suspend.service
 configs/systemd/user/omarchy-llama-server.service
-======= docs (3)
 docs/INSTALL-POINTERS.md
-docs/INVENTORY-live-2026-09-05.md
-docs/MANIFEST-live-20260905.txt
+docs/INVENTORY.md
+
+## Explicitly EXCLUDED (confirmed not present in dump)
+- ~/.pi/agent/auth.json (and any tokens)
+- *.gguf model weights
+- Cursor AppImage / ~/.local/opt/cursor binaries
+- llama.cpp binary trees / run/ unpack
+- Never touched: x1e-ec-tool service, kbuild, reboot
