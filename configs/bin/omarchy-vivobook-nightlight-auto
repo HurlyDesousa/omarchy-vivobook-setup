@@ -264,7 +264,7 @@ omarchy-vivobook-nightlight-auto — Berlin auto night light (hyprsunset profile
   status                Print auto state and today's sun times
   boundary              Daily refresh (clear stale override, regen conf)
 
-Middle-click the bar night-light indicator to toggle auto (after overlay install).
+Right-click the bar night-light indicator for the Auto options menu (after overlay install).
 EOF
 }
 
