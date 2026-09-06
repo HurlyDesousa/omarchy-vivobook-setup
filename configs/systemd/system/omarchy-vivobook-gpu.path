@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch Vivobook power mode for GPU pin
+After=multi-user.target
+
+[Path]
+PathChanged=/home/hurly/.local/state/omarchy/powerprofiles/vivobook-mode
+Unit=omarchy-vivobook-gpu.service
+
+[Install]
+WantedBy=multi-user.target

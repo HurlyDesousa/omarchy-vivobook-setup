@@ -1,0 +1,10 @@
+[Unit]
+Description=Vivobook GPU max clock pin (Performance / Full Speed)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/omarchy-vivobook-gpu
+
+[Install]
+WantedBy=multi-user.target

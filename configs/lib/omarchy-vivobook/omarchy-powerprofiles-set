@@ -1,9 +1,16 @@
 #!/bin/bash
 # Vivobook: PPD + x1e-ec-tool fan profiles.
-# Defaults: AC → balanced (EC 1), battery → power-saver (EC 0 Whisper).
+# Defaults: AC → balanced (EC 1 Standard), battery → power-saver (EC 0 Whisper).
 # Never stops x1e-ec-tool.service.
+#
+# Performance / Full Speed request PPD's max-performance CPU profile
+# (`performance`) and pin the Adreno GPU to its max clock. This Snapdragon
+# PPD often only exposes power-saver and balanced (placeholder driver); in
+# that case we pin CPUFreq to the `performance` governor — the same policy
+# PPD would apply.
 set -euo pipefail
 REAL=/usr/bin/omarchy-powerprofiles-set
+REAL_LIST=/usr/bin/omarchy-powerprofiles-list
 EC=/usr/local/bin/x1e-ec-tool
 PPCTL=/usr/bin/powerprofilesctl
 if [[ -n "${OMARCHY_POWERPROFILES_STATE_DIR:-}" ]]; then
@@ -18,6 +25,86 @@ MODE_FILE="$STATE_DIR/vivobook-mode"
 usage() {
   echo "Usage: omarchy-powerprofiles-set [autodetect|ac|battery] [power-saver|balanced|performance|full-speed]" >&2
   exit 1
+}
+
+ppd_has() {
+  local want=$1
+  [[ -x $REAL_LIST ]] || return 1
+  "$REAL_LIST" 2>/dev/null | grep -qx "$want"
+}
+
+# Pin every policy to a CPUFreq governor. User-writable sysfs first; passwordless
+# sudo if the nodes are root-owned.
+pin_cpu_governor() {
+  local gov=$1
+  local f wrote=0
+  local avail=""
+  [[ -r /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors ]] &&
+    avail=$(< /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors)
+  if [[ -n $avail && " $avail " != *" $gov "* ]]; then
+    return 1
+  fi
+  for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+    [[ -e $f ]] || continue
+    if [[ -w $f ]]; then
+      printf '%s\n' "$gov" >"$f" && wrote=1
+    fi
+  done
+  if [[ $wrote -eq 1 ]]; then
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -n bash -c '
+      gov="$1"
+      for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        [[ -e $f ]] || continue
+        printf "%s\n" "$gov" >"$f"
+      done
+    ' bash "$gov" 2>/dev/null
+    return $?
+  fi
+  return 1
+}
+
+apply_gpu_policy() {
+  local helper=""
+  local h
+  for h in /usr/local/bin/omarchy-vivobook-gpu \
+           /home/hurly/.local/lib/omarchy-vivobook/omarchy-vivobook-gpu; do
+    [[ -x $h ]] && helper=$h && break
+  done
+  [[ -n $helper ]] || return 0
+  if "$helper" 2>/dev/null; then
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -n "$helper" 2>/dev/null && return 0
+  fi
+  return 0
+}
+
+apply_max_performance_cpu() {
+  local ppd_rc=1
+  if ppd_has performance; then
+    "$PPCTL" set performance
+    ppd_rc=$?
+  else
+    "$PPCTL" set performance >/dev/null 2>&1
+    ppd_rc=$?
+  fi
+  pin_cpu_governor performance || true
+  local gov=""
+  [[ -r /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]] &&
+    gov=$(< /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)
+  if [[ $ppd_rc -eq 0 ]]; then
+    printf '%s\n' performance >"$STATE_DIR/$action"
+  else
+    printf '%s\n' balanced >"$STATE_DIR/$action"
+  fi
+  # CPU already at max-performance governor counts as success when PPD
+  # has no performance profile to select.
+  [[ $ppd_rc -eq 0 || $gov == performance ]] && return 0
+  return 1
 }
 
 action="${1:-}"
@@ -51,8 +138,8 @@ ec_idx=""
 case "$requested" in
   power-saver) ppd=power-saver; ec_idx=0 ;;
   balanced)    ppd=balanced;    ec_idx=1 ;;
-  performance) ppd=balanced;    ec_idx=2 ;;
-  full-speed)  ppd=balanced;    ec_idx=3 ;;
+  performance) ppd=performance; ec_idx=2 ;;
+  full-speed)  ppd=performance;  ec_idx=3 ;;
   *)
     echo "Power profile is not available: $requested" >&2
     exit 1
@@ -64,21 +151,28 @@ if [[ "$requested" == "power-saver" || "$requested" == "balanced" ]]; then
   "$REAL" "$action" "$ppd"
   ppd_rc=$?
 else
-  "$PPCTL" set "$ppd"
+  apply_max_performance_cpu
   ppd_rc=$?
-  printf '%s\n' "$ppd" >"$STATE_DIR/$action"
 fi
 set -e
 
 if [[ -x "$EC" ]]; then
-  "$EC" mode auto >/dev/null 2>&1 || true
-  "$EC" profile "$ec_idx"
+  if [[ "$requested" == "full-speed" ]]; then
+    # Profile 3 in auto is still a thermal curve (quiet at idle). Manual +
+    # max duty is the only way the fans actually go to full speed.
+    "$EC" mode manual >/dev/null 2>&1 || true
+    "$EC" set-speed 8400
+  else
+    "$EC" mode auto >/dev/null 2>&1 || true
+    "$EC" profile "$ec_idx"
+  fi
 fi
 
 printf '%s\n' "$requested" >"$MODE_FILE"
 chown hurly:hurly "$MODE_FILE" "$STATE_DIR/$action" 2>/dev/null || true
+apply_gpu_policy || true
 
 if [[ ${ppd_rc:-0} -ne 0 ]]; then
-  echo "warning: PPD set failed (rc=$ppd_rc); EC profile $ec_idx ($requested) applied" >&2
+  echo "warning: PPD has no performance profile; CPUFreq pinned to performance; EC profile $ec_idx ($requested) applied" >&2
 fi
 exit 0

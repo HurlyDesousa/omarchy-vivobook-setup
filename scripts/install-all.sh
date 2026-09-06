@@ -303,7 +303,7 @@ main() {
   info "=== Vivobook powerprofiles ==="
   VIVOBOOK_LIB="${HOME}/.local/lib/omarchy-vivobook"
   mkdir -p "${VIVOBOOK_LIB}"
-  for script in omarchy-powerprofiles-list omarchy-powerprofiles-set; do
+  for script in omarchy-powerprofiles-list omarchy-powerprofiles-set omarchy-vivobook-gpu omarchy-battery-status; do
     apply_fragment \
       "${CONFIGS_DIR}/lib/omarchy-vivobook/${script}" \
       "${VIVOBOOK_LIB}/${script}" \
@@ -325,6 +325,19 @@ main() {
     "${CONFIGS_DIR}/systemd/system/omarchy-vivobook-powerprofiles-autodetect.service" \
     "/etc/systemd/system/omarchy-vivobook-powerprofiles-autodetect.service" \
     "systemd omarchy-vivobook-powerprofiles-autodetect.service"
+  install_system_file \
+    "${CONFIGS_DIR}/lib/omarchy-vivobook/omarchy-vivobook-gpu" \
+    "/usr/local/bin/omarchy-vivobook-gpu" \
+    "vivobook GPU pin → /usr/local/bin" \
+    "755"
+  install_system_file \
+    "${CONFIGS_DIR}/systemd/system/omarchy-vivobook-gpu.service" \
+    "/etc/systemd/system/omarchy-vivobook-gpu.service" \
+    "systemd omarchy-vivobook-gpu.service"
+  install_system_file \
+    "${CONFIGS_DIR}/systemd/system/omarchy-vivobook-gpu.path" \
+    "/etc/systemd/system/omarchy-vivobook-gpu.path" \
+    "systemd omarchy-vivobook-gpu.path"
 
   if command -v systemctl >/dev/null 2>&1; then
     if [[ -w /etc/systemd/system ]] || command -v sudo >/dev/null 2>&1; then
@@ -332,10 +345,14 @@ main() {
         sudo systemctl daemon-reload 2>/dev/null || warn "systemctl daemon-reload failed"
         sudo systemctl enable omarchy-vivobook-powerprofiles-autodetect.service 2>/dev/null \
           || warn "Could not enable omarchy-vivobook-powerprofiles-autodetect.service"
+        sudo systemctl enable --now omarchy-vivobook-gpu.path 2>/dev/null \
+          || warn "Could not enable omarchy-vivobook-gpu.path"
       else
         systemctl daemon-reload 2>/dev/null || warn "systemctl daemon-reload failed"
         systemctl enable omarchy-vivobook-powerprofiles-autodetect.service 2>/dev/null \
           || warn "Could not enable omarchy-vivobook-powerprofiles-autodetect.service"
+        systemctl enable --now omarchy-vivobook-gpu.path 2>/dev/null \
+          || warn "Could not enable omarchy-vivobook-gpu.path"
       fi
     fi
     if command -v udevadm >/dev/null 2>&1; then
@@ -363,14 +380,6 @@ main() {
     "${PANEL_HOOK}" || warn "restore-vivobook-power-panel.hook failed (sudo may be required for /usr/share/omarchy/shell/plugins/panels/power/)"
   else
     warn "restore-vivobook-power-panel.hook not installed yet — re-run after hooks section"
-  fi
-
-  BATT_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-battery-status.hook"
-  if [[ -x "${BATT_HOOK}" ]]; then
-    info "Running restore-vivobook-battery-status.hook…"
-    "${BATT_HOOK}" || warn "restore-vivobook-battery-status.hook failed (may need omarchy base install or sudo for /usr/share/omarchy/bin)"
-  else
-    warn "restore-vivobook-battery-status.hook not installed yet — re-run after hooks section"
   fi
   echo
 

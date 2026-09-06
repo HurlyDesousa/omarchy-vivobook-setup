@@ -1,0 +1,22 @@
+#!/bin/bash
+# Vivobook: pin Adreno GPU to max clock (1250 MHz) for Performance / Full Speed.
+# No-op for power-saver / balanced. Requires root for kgsl devfreq nodes.
+set -euo pipefail
+
+MODE_FILE="${OMARCHY_POWERPROFILES_STATE_DIR:-/home/hurly/.local/state/omarchy/powerprofiles}/vivobook-mode"
+GPU_MIN=/sys/class/kgsl/kgsl-3d0/devfreq/min_freq
+GPU_MAX=/sys/class/kgsl/kgsl-3d0/devfreq/max_freq
+TARGET_HZ=1250000000
+
+mode=""
+[[ -r $MODE_FILE ]] && mode=$(tr -d '\r\n' <"$MODE_FILE")
+
+case "$mode" in
+  performance|full-speed) ;;
+  *) exit 0 ;;
+esac
+
+[[ -w $GPU_MIN && -w $GPU_MAX ]] || exit 0
+
+printf '%s\n' "$TARGET_HZ" >"$GPU_MIN"
+printf '%s\n' "$TARGET_HZ" >"$GPU_MAX"
