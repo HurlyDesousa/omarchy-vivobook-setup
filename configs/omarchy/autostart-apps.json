@@ -46,8 +46,16 @@
       "desktop": "opera.desktop",
       "name": "Opera",
       "exec": "opera",
-      "class": "opera",
+      "class": "Opera",
       "workspace": 6
+    },
+    {
+      "id": "firefox",
+      "desktop": "firefox.desktop",
+      "name": "Firefox",
+      "exec": "/usr/lib/firefox/firefox",
+      "class": "firefox",
+      "workspace": 7
     }
   ]
 }
