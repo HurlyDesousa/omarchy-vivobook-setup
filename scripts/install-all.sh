@@ -159,10 +159,32 @@ main() {
 
   # 3. Hyprland config fragments
   info "=== Hyprland ==="
-  apply_fragment \
-    "${CONFIGS_DIR}/hypr/autostart.lua.fragment" \
-    "${HOME}/.config/hypr/autostart.lua" \
-    "hypr autostart.lua"
+  if command -v omarchy-autostart-apps >/dev/null 2>&1 \
+      && [[ -f "${CONFIGS_DIR}/omarchy/autostart-apps.json" ]]; then
+    mkdir -p "${HOME}/.config/omarchy"
+    apply_fragment \
+      "${CONFIGS_DIR}/omarchy/autostart-apps.json" \
+      "${HOME}/.config/omarchy/autostart-apps.json" \
+      "omarchy autostart-apps.json"
+    info "Regenerating hypr autostart.lua via omarchy-autostart-apps…"
+    omarchy-autostart-apps apply 2>/dev/null || omarchy-autostart-apps sync 2>/dev/null \
+      || apply_fragment \
+        "${CONFIGS_DIR}/hypr/autostart.lua.fragment" \
+        "${HOME}/.config/hypr/autostart.lua" \
+        "hypr autostart.lua (fallback fragment)"
+  else
+    apply_fragment \
+      "${CONFIGS_DIR}/hypr/autostart.lua.fragment" \
+      "${HOME}/.config/hypr/autostart.lua" \
+      "hypr autostart.lua"
+    if [[ -f "${CONFIGS_DIR}/omarchy/autostart-apps.json" ]]; then
+      mkdir -p "${HOME}/.config/omarchy"
+      apply_fragment \
+        "${CONFIGS_DIR}/omarchy/autostart-apps.json" \
+        "${HOME}/.config/omarchy/autostart-apps.json" \
+        "omarchy autostart-apps.json"
+    fi
+  fi
   apply_fragment \
     "${CONFIGS_DIR}/hypr/input.lua.fragment" \
     "${HOME}/.config/hypr/input.lua" \
@@ -452,6 +474,20 @@ main() {
       || warn "Could not enable omarchy-vivobook-nightlight-auto-apply.service"
     systemctl --user start omarchy-vivobook-nightlight-auto.timer 2>/dev/null \
       || warn "Could not start omarchy-vivobook-nightlight-auto.timer"
+  fi
+  echo
+
+  # 7e. Login autostart (sw.art.autostart plugin + JSON + hypr block)
+  info "=== Login autostart ==="
+  AS_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-autostart.hook"
+  if [[ -x "${AS_HOOK}" ]]; then
+    info "Running restore-vivobook-autostart.hook…"
+    "${AS_HOOK}" || warn "restore-vivobook-autostart.hook failed"
+  else
+    warn "restore-vivobook-autostart.hook not installed yet — re-run after hooks section"
+  fi
+  if ! command -v omarchy-autostart-apps >/dev/null 2>&1; then
+    warn "omarchy-autostart-apps not in PATH — install from live system (docs/INSTALL-POINTERS.md); bar panel needs it"
   fi
   echo
 

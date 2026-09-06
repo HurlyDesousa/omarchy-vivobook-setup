@@ -1,0 +1,53 @@
+{
+  "enabled": true,
+  "apps": [
+    {
+      "id": "cursor",
+      "desktop": "cursor.desktop",
+      "name": "Cursor",
+      "exec": "/home/hurly/.local/bin/cursor",
+      "class": "Cursor",
+      "workspace": 1
+    },
+    {
+      "id": "org.mozilla.Thunderbird",
+      "desktop": "org.mozilla.Thunderbird.desktop",
+      "name": "Thunderbird",
+      "exec": "thunderbird",
+      "class": "thunderbird",
+      "workspace": 2
+    },
+    {
+      "id": "org.telegram.desktop",
+      "desktop": "org.telegram.desktop.desktop",
+      "name": "Telegram",
+      "exec": "Telegram",
+      "class": "TelegramDesktop",
+      "workspace": 3
+    },
+    {
+      "id": "brave-browser",
+      "desktop": "brave-browser.desktop",
+      "name": "Brave",
+      "exec": "brave",
+      "class": "brave-browser",
+      "workspace": 4
+    },
+    {
+      "id": "chromium",
+      "desktop": "chromium.desktop",
+      "name": "Chromium",
+      "exec": "/usr/bin/chromium",
+      "class": "chromium",
+      "workspace": 5
+    },
+    {
+      "id": "opera",
+      "desktop": "opera.desktop",
+      "name": "Opera",
+      "exec": "opera",
+      "class": "opera",
+      "workspace": 6
+    }
+  ]
+}

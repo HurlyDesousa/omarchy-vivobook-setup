@@ -1,40 +1,31 @@
 #!/usr/bin/env bash
-# Vivobook wrapper: stock omarchy-toggle-nightlight + manual-override tracking for auto mode.
+# Vivobook wrapper: toggle night light using the saved warmth amount.
 set -euo pipefail
 
-LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STOCK="${LIB_DIR}/.stock-omarchy-toggle-nightlight"
-
-if [[ ! -x "${STOCK}" ]]; then
-  for candidate in \
-    /usr/share/omarchy/bin/.stock-omarchy-toggle-nightlight \
-    /usr/share/omarchy/bin/omarchy-toggle-nightlight; do
-    if [[ -x "${candidate}" && ! -L "${candidate}" ]]; then
-      STOCK="${candidate}"
-      break
-    fi
-  done
+AUTO="${HOME}/.local/bin/omarchy-vivobook-nightlight-auto"
+if [[ ! -x "${AUTO}" ]]; then
+  AUTO="$(command -v omarchy-vivobook-nightlight-auto || true)"
 fi
-
-if [[ ! -x "${STOCK}" ]]; then
-  echo "omarchy-toggle-nightlight: stock script not found" >&2
+if [[ ! -x "${AUTO}" ]]; then
+  echo "omarchy-toggle-nightlight: omarchy-vivobook-nightlight-auto not found" >&2
   exit 1
 fi
 
-"${STOCK}" "$@"
+if [[ ${1:-} == "--status" ]]; then
+  TEMP="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' | head -n1 || true)"
+  if [[ -n "${TEMP}" && "${TEMP}" -lt 6000 ]]; then
+    enabled=true
+  else
+    enabled=false
+  fi
+  jq -cn --argjson enabled "$enabled" --arg temp "$TEMP" \
+    '{enabled:$enabled, temperature:(($temp | tonumber?) // null)}'
+  exit 0
+fi
 
-# After stock toggle, record manual override when auto schedule is enabled.
-CURRENT_TEMP="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' || true)"
-if [[ -n "${CURRENT_TEMP}" && "${CURRENT_TEMP}" -lt 6000 ]]; then
-  NEXT_MODE="on"
+CURRENT="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' | head -n1 || true)"
+if [[ -n "${CURRENT}" && "${CURRENT}" -lt 6000 ]]; then
+  "${AUTO}" now-off
 else
-  NEXT_MODE="off"
-fi
-
-if command -v omarchy-vivobook-nightlight-auto >/dev/null 2>&1; then
-  omarchy-vivobook-nightlight-auto manual "${NEXT_MODE}"
-fi
-
-if command -v omarchy-shell >/dev/null 2>&1; then
-  omarchy-shell -q nightlight refresh 2>/dev/null || true
+  "${AUTO}" now-on
 fi

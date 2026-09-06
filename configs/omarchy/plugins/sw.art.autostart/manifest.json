@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "sw.art.autostart",
+  "name": "Autostart",
+  "version": "1.1.0",
+  "author": "Toby Swart",
+  "license": "MIT",
+  "description": "Login autostart list: apps and the workspace they open on",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Autostart",
+    "description": "Choose apps that start at login and which workspace they use",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

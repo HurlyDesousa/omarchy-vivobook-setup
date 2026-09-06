@@ -1,0 +1,38 @@
+#!/bin/bash
+# Omarchy post-update hook: Vivobook login autostart (plugin + hypr block sync).
+set -euo pipefail
+
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+CONFIGS="${REPO_ROOT}/configs"
+PLUGIN_SRC="${CONFIGS}/omarchy/plugins/sw.art.autostart"
+PLUGIN_DEST="${HOME}/.config/omarchy/plugins/sw.art.autostart"
+JSON_SRC="${CONFIGS}/omarchy/autostart-apps.json"
+JSON_DEST="${HOME}/.config/omarchy/autostart-apps.json"
+HYPR_SRC="${CONFIGS}/hypr/autostart.lua.fragment"
+HYPR_DEST="${HOME}/.config/hypr/autostart.lua"
+
+install_file() {
+  local src="$1"
+  local dest="$2"
+  [[ -f "${src}" ]] || return 0
+  mkdir -p "$(dirname "${dest}")"
+  cp "${src}" "${dest}"
+}
+
+install_plugin() {
+  [[ -d "${PLUGIN_SRC}" ]] || return 0
+  mkdir -p "${PLUGIN_DEST}"
+  for f in manifest.json BarWidget.qml Panel.qml; do
+    [[ -f "${PLUGIN_SRC}/${f}" ]] || continue
+    cp "${PLUGIN_SRC}/${f}" "${PLUGIN_DEST}/${f}"
+  done
+}
+
+install_plugin
+install_file "${JSON_SRC}" "${JSON_DEST}"
+
+if command -v omarchy-autostart-apps >/dev/null 2>&1; then
+  omarchy-autostart-apps apply 2>/dev/null || omarchy-autostart-apps sync 2>/dev/null || true
+elif [[ -f "${HYPR_SRC}" ]]; then
+  install_file "${HYPR_SRC}" "${HYPR_DEST}"
+fi
