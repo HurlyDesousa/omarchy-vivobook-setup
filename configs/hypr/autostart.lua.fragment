@@ -16,6 +16,7 @@ hl.on("hyprland.start", function()
   hl.exec_cmd(o.launch("brave"), { workspace = "4 silent" })
   hl.exec_cmd(o.launch("/usr/bin/chromium"), { workspace = "5 silent" })
   hl.exec_cmd(o.launch("opera"), { workspace = "6 silent" })
+  hl.exec_cmd(o.launch("/usr/lib/firefox/firefox"), { workspace = "7 silent" })
 end)
 
 o.window("^Cursor$", { workspace = "1 silent" })
@@ -24,4 +25,5 @@ o.window("^TelegramDesktop$", { workspace = "3 silent" })
 o.window("^brave\\-browser$", { workspace = "4 silent" })
 o.window("^chromium$", { workspace = "5 silent" })
 o.window("^Opera$", { workspace = "6 silent" })
+o.window("^firefox$", { workspace = "7 silent" })
 -- sw.art.autostart end
