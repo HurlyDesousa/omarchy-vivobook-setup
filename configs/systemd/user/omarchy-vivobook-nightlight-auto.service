@@ -1,0 +1,11 @@
+[Unit]
+Description=Vivobook auto night light — refresh Berlin hyprsunset schedule
+After=graphical-session.target hyprsunset.service
+PartOf=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omarchy-vivobook-nightlight-auto boundary
+
+[Install]
+WantedBy=default.target

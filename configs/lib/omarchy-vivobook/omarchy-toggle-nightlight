@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Vivobook wrapper: stock omarchy-toggle-nightlight + manual-override tracking for auto mode.
+set -euo pipefail
+
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STOCK="${LIB_DIR}/.stock-omarchy-toggle-nightlight"
+
+if [[ ! -x "${STOCK}" ]]; then
+  for candidate in \
+    /usr/share/omarchy/bin/.stock-omarchy-toggle-nightlight \
+    /usr/share/omarchy/bin/omarchy-toggle-nightlight; do
+    if [[ -x "${candidate}" && ! -L "${candidate}" ]]; then
+      STOCK="${candidate}"
+      break
+    fi
+  done
+fi
+
+if [[ ! -x "${STOCK}" ]]; then
+  echo "omarchy-toggle-nightlight: stock script not found" >&2
+  exit 1
+fi
+
+"${STOCK}" "$@"
+
+# After stock toggle, record manual override when auto schedule is enabled.
+CURRENT_TEMP="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' || true)"
+if [[ -n "${CURRENT_TEMP}" && "${CURRENT_TEMP}" -lt 6000 ]]; then
+  NEXT_MODE="on"
+else
+  NEXT_MODE="off"
+fi
+
+if command -v omarchy-vivobook-nightlight-auto >/dev/null 2>&1; then
+  omarchy-vivobook-nightlight-auto manual "${NEXT_MODE}"
+fi
+
+if command -v omarchy-shell >/dev/null 2>&1; then
+  omarchy-shell -q nightlight refresh 2>/dev/null || true
+fi

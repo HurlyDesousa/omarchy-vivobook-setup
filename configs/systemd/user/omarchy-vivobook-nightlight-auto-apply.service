@@ -1,0 +1,11 @@
+[Unit]
+Description=Apply Vivobook auto night light after graphical login
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omarchy-vivobook-nightlight-auto apply
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,56 @@
+#!/bin/bash
+# Omarchy post-update hook: Vivobook night-light auto overlay (QS service + indicator).
+set -euo pipefail
+
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+OVERLAY="${REPO_ROOT}/configs/omarchy/overlays"
+
+copy_overlay() {
+  local src="$1"
+  local dest="$2"
+  local dest_dir
+  dest_dir="$(dirname "${dest}")"
+  if [[ ! -d "${dest_dir}" ]]; then
+    echo "restore-vivobook-nightlight-auto.hook: missing ${dest_dir}" >&2
+    return 1
+  fi
+  if [[ -w "${dest_dir}" ]]; then
+    cp "${src}" "${dest}"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo cp "${src}" "${dest}"
+  else
+    echo "restore-vivobook-nightlight-auto.hook: cannot write ${dest} — run with sudo" >&2
+    return 1
+  fi
+}
+
+# Service.qml overlay keeps NightlightModel.js from stock (same directory).
+svc_src="${OVERLAY}/services/nightlight/Service.qml"
+svc_dest="/usr/share/omarchy/shell/plugins/services/nightlight/Service.qml"
+if [[ -f "${svc_src}" ]]; then
+  copy_overlay "${svc_src}" "${svc_dest}" || exit 1
+fi
+
+ind_src="${OVERLAY}/bar/indicators/NightLight.qml"
+ind_dest="/usr/share/omarchy/shell/plugins/bar/indicators/NightLight.qml"
+if [[ -f "${ind_src}" ]]; then
+  copy_overlay "${ind_src}" "${ind_dest}" || exit 1
+fi
+
+# Wrap stock toggle so Super+Ctrl+N also records manual override while auto is on.
+LIB="${HOME}/.local/lib/omarchy-vivobook"
+SHARE_BIN="/usr/share/omarchy/bin"
+STOCK="${SHARE_BIN}/.stock-omarchy-toggle-nightlight"
+if [[ -x "${LIB}/omarchy-toggle-nightlight" ]]; then
+  if [[ ! -x "${STOCK}" && -x "${SHARE_BIN}/omarchy-toggle-nightlight" \
+      && ! -L "${SHARE_BIN}/omarchy-toggle-nightlight" ]]; then
+    cp -a "${SHARE_BIN}/omarchy-toggle-nightlight" "${STOCK}"
+  fi
+  if [[ -w "${SHARE_BIN}" ]] || command -v sudo >/dev/null 2>&1; then
+    if [[ -w "${SHARE_BIN}" ]]; then
+      ln -sfn "${LIB}/omarchy-toggle-nightlight" "${SHARE_BIN}/omarchy-toggle-nightlight"
+    else
+      sudo ln -sfn "${LIB}/omarchy-toggle-nightlight" "${SHARE_BIN}/omarchy-toggle-nightlight"
+    fi
+  fi
+fi
