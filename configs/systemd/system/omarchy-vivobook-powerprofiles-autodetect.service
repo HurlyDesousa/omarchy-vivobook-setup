@@ -6,6 +6,7 @@ Wants=upower.service
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/omarchy-vivobook-powerprofiles-autodetect
+# User session not required; root can set PPD + EC
 
 [Install]
 WantedBy=multi-user.target

@@ -82,6 +82,13 @@ Panel {
     return Model.batteryFraction(d)
   }
 
+  readonly property string batteryPercentLabel: {
+    if (!root.batteryPresent) return "—"
+    var n = Math.round(root.batteryFraction * 100)
+    if (!isFinite(n)) return root.batteryInfo.percentage || "—"
+    return n + "%"
+  }
+
   readonly property bool charging: {
     var d = UPower.displayDevice
     return d && d.isPresent && !UPower.onBattery && !root.batteryFlowIdle
@@ -207,7 +214,7 @@ Panel {
 
   Process {
     id: batteryProc
-    command: ["omarchy-battery-status", "--shell"]
+    command: [Quickshell.env("HOME") + "/.local/lib/omarchy-vivobook/omarchy-battery-status", "--shell"]
     stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.updateKeyValue(text, "battery") }
   }
 
@@ -368,7 +375,7 @@ Panel {
 
           Text {
             id: heroPercent
-            text: root.batteryInfo.percentage || "—"
+            text: root.batteryPercentLabel
             color: root.bar.foreground
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.displayLarge
@@ -422,7 +429,7 @@ Panel {
         // the battery sits above the charge-control start threshold, and we
         // refuse to flicker the whole panel for that ~1s window.
         Row {
-          visible: root.batteryInfo.percentage !== undefined
+          visible: root.batteryPresent
           width: parent.width
           spacing: Style.space(20)
 

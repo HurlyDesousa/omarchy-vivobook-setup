@@ -78,7 +78,7 @@ function profileLabel(name) {
   if (name === "power-saver") return "Power Saver"
   if (name === "balanced") return "Balanced"
   if (name === "performance") return "Performance"
-  if (name === "full-speed") return "Full Speed Power"
+  if (name === "full-speed") return "Full Speed"
   var s = String(name || "")
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : ""
 }

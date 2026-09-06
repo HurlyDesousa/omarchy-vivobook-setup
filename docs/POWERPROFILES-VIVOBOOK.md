@@ -1,6 +1,6 @@
 # Vivobook power profiles (Omarchy overlay)
 
-ASUS Vivobook S15 (`S5507QA`, Snapdragon X Elite) adds two **synthetic** power modes on top of stock Omarchy / `power-profiles-daemon` (PPD): **Performance** and **Full Speed Power**. They share PPD `balanced` but drive different `x1e-ec-tool` fan profiles so the tray can offer four distinct thermal presets on battery.
+ASUS Vivobook S15 (`S5507QA`, Snapdragon X Elite) adds two **synthetic** power modes on top of stock Omarchy / `power-profiles-daemon` (PPD): **Performance** and **Full Speed**. Both request PPD’s max-performance CPU profile (`performance`) and drive different `x1e-ec-tool` fan curves. This SoC’s PPD often only exposes `power-saver` and `balanced` (placeholder driver); in that case the wrapper pins CPUFreq to the `performance` governor.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ When Omarchy calls `omarchy-powerprofiles-set` with `ac` or `battery` and **no e
 
 | Power context | Default mode   | EC profile |
 |---------------|----------------|------------|
-| AC            | `balanced`     | 1          |
+| AC            | `balanced`      | 1          |
 | Battery       | `power-saver`  | 0          |
 
 Event-driven re-apply:
@@ -39,12 +39,12 @@ Explicit tray picks always pass a profile slug and override these defaults until
 
 ## EC profile mapping
 
-| Tray mode        | PPD profile   | x1e-ec-tool profile | EC name     |
-|------------------|---------------|---------------------|-------------|
-| Power Saver      | `power-saver` | 0                   | Whisper     |
-| Balanced         | `balanced`    | 1                   | Standard    |
-| Performance      | `balanced`    | 2                   | Performance |
-| Full Speed Power | `balanced`    | 3                   | Full speed (MAX fans) |
+| Tray mode        | CPU (PPD / CPUFreq) | x1e-ec-tool profile | EC name     |
+|------------------|---------------------|---------------------|-------------|
+| Power Saver      | PPD `power-saver` | 0                   | Whisper     |
+| Balanced         | PPD `balanced`    | 1                   | Standard    |
+| Performance      | PPD `performance` (else CPUFreq `performance`); GPU pinned to 1250 MHz | 2 | Performance |
+| Full Speed | PPD `performance` (else CPUFreq `performance`); GPU pinned to 1250 MHz | 3 | Full speed — **manual max RPM** (not the auto curve) |
 
 Active Vivobook mode is stored in `~/.local/state/omarchy/powerprofiles/vivobook-mode`. Per-context PPD state (`ac` / `battery`) is written under the same directory when synthetic modes bypass the stock setter.
 
@@ -54,24 +54,23 @@ Active Vivobook mode is stored in `~/.local/state/omarchy/powerprofiles/vivobook
 |------|------|
 | `configs/lib/omarchy-vivobook/omarchy-powerprofiles-list` | Lists real PPD profiles plus `performance` and `full-speed` |
 | `configs/lib/omarchy-vivobook/omarchy-powerprofiles-set` | Maps modes to PPD + EC; AC/battery auto defaults; never stops `x1e-ec-tool.service` |
-| `configs/lib/omarchy-vivobook/omarchy-vivobook-powerprofiles-autodetect` | Oneshot entrypoint → wrapped `autodetect` |
-| `configs/bin/omarchy-battery-status` | Qualcomm battmgr-aware battery status (`--shell` for power panel) |
+| `configs/lib/omarchy-vivobook/omarchy-vivobook-gpu` | Pins Adreno GPU max clock for Performance / Full Speed |
+| `configs/systemd/system/omarchy-vivobook-gpu.service` / `.path` | Root oneshot when `vivobook-mode` changes |
 | `configs/udev/99-omarchy-vivobook-powerprofiles.rules` | AC plug/unplug → autodetect service |
 | `configs/systemd/system/omarchy-vivobook-powerprofiles-autodetect.service` | systemd oneshot unit |
 | `~/.local/lib/omarchy-vivobook/` | Installed copies (chmod +x) |
 | `/usr/share/omarchy/bin/omarchy-powerprofiles-*` | Symlinks restored by `restore-vivobook-powerprofiles.hook` |
-| `/usr/share/omarchy/bin/omarchy-battery-status` | Symlink restored by `restore-vivobook-battery-status.hook` |
 
 ## Power panel QML polish
 
 Stock Omarchy lays out four profile buttons in a single row. Overlays under `configs/omarchy/overlays/panels/power/` use a **2×2 grid**:
 
 - **Row 1:** Power Saver | Balanced
-- **Row 2:** Performance | Full Speed Power
+- **Row 2:** Performance | Full Speed
 
 Additional polish:
 
-- **`Model.js`** — `profileLabel()` for human labels (`Full Speed Power`, `Power Saver`, …), ordered profile list, and 2D keyboard navigation
+- **`Model.js`** — `profileLabel()` for human labels (`Full Speed`, `Power Saver`, …), ordered profile list, and 2D keyboard navigation
 - **`Panel.qml`** — 2×2 grid; uses `Model.profileLabel()` instead of naive capitalize
 
 `restore-vivobook-power-panel.hook` copies these onto `/usr/share/omarchy/shell/plugins/panels/power/` (uses `sudo` when the target is not user-writable).
@@ -81,7 +80,6 @@ Additional polish:
 - **Wrappers not used after Omarchy update:** run `~/.config/omarchy/hooks/post-update.d/restore-vivobook-powerprofiles.hook` or re-run `./scripts/install-all.sh`
 - **Tray still shows `Full-speed` or single row:** run `restore-vivobook-power-panel.hook` (may need sudo), then `omarchy-restart-shell`
 - **Wrong profile after plug/unplug:** confirm udev rule and `omarchy-vivobook-powerprofiles-autodetect.service` are installed (`./scripts/install-all.sh` with sudo)
-- **Battery percentage blank at 100%:** confirm `omarchy-battery-status` is the Vivobook wrapper (`restore-vivobook-battery-status.hook` or re-run `./scripts/install-all.sh`)
 - **Fans unchanged:** confirm `x1e-ec-tool.service` is active and `/usr/local/bin/x1e-ec-tool profile N` works
 - **PPD warning on synthetic modes:** expected if PPD rejects a repeat set; EC profile is still applied
 
