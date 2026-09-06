@@ -2,6 +2,13 @@
 # Omarchy post-update hook: re-apply Vivobook power panel QML polish overlay.
 set -euo pipefail
 
+for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
+               "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
+  [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
+    source "${_vb_lib}"; vivobook_ensure_user_home; break; }
+done
+[[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
+
 REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
 OVERLAY="${REPO_ROOT}/configs/omarchy/overlays/panels/power"
 TARGET="/usr/share/omarchy/shell/plugins/panels/power"

@@ -29,6 +29,8 @@ cd omarchy-vivobook-setup
 ./scripts/install-all.sh
 ```
 
+Run as your normal user, or `sudo ./scripts/install-all.sh` when system paths need root — **not** as bare root (`sudo -i`). User overlays always install to hurly’s home (`/home/hurly`); see [docs/INSTALL-POINTERS.md](docs/INSTALL-POINTERS.md).
+
 `install-all.sh` is **idempotent**: safe to re-run after pulling updates or when Omarchy Master delivers the inventory merge.
 
 ### What the orchestrator does

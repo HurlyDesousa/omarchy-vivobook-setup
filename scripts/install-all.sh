@@ -5,6 +5,10 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=lib/user-home.sh
+source "${SCRIPT_DIR}/lib/user-home.sh"
+_ORIGINAL_HOME="${HOME}"
+resolve_omarchy_home || exit 1
 CONFIGS_DIR="${REPO_ROOT}/configs"
 REPOS_DIR="${OMARCHY_REPOS_DIR:-${HOME}/src/omarchy-vivobook-setup/repos}"
 
@@ -141,6 +145,9 @@ install_system_file() {
 
 main() {
   info "omarchy-vivobook-setup restore (repo: ${REPO_ROOT})"
+  if [[ "${_ORIGINAL_HOME}" != "${HOME}" ]]; then
+    info "Install target home: ${HOME} (root/sudo — user overlays will not use /root)"
+  fi
   echo
 
   # 1. Related repos
@@ -352,6 +359,10 @@ main() {
   info "=== Vivobook powerprofiles ==="
   VIVOBOOK_LIB="${HOME}/.local/lib/omarchy-vivobook"
   mkdir -p "${VIVOBOOK_LIB}"
+  apply_fragment \
+    "${CONFIGS_DIR}/lib/omarchy-vivobook/user-home.sh" \
+    "${VIVOBOOK_LIB}/user-home.sh" \
+    "vivobook user-home resolver"
   for script in omarchy-powerprofiles-list omarchy-powerprofiles-set omarchy-vivobook-gpu omarchy-battery-status; do
     apply_fragment \
       "${CONFIGS_DIR}/lib/omarchy-vivobook/${script}" \

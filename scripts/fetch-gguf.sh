@@ -3,6 +3,11 @@
 # Does NOT commit blobs to git. See docs/GGUF.md.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/user-home.sh
+source "${SCRIPT_DIR}/lib/user-home.sh"
+resolve_omarchy_home || exit 1
+
 GGUF_DEST="${GGUF_DEST:-${HOME}/.local/share/models}"
 GGUF_FILENAME="${GGUF_FILENAME:-model.gguf}"
 GGUF_URL="${GGUF_URL:-}"
