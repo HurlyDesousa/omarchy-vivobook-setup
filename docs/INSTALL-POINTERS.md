@@ -31,4 +31,5 @@ Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sourc
 ## Quickshell system patches (wiped by Omarchy update)
 - Idle dim: apply `configs/quickshell/idle.patch` to `/usr/share/omarchy/shell/plugins/services/idle/Service.qml`
 - Lock lid harden: apply `configs/quickshell/lock-lidharden.patch` to `/usr/share/omarchy/shell/plugins/lock/Service.qml`
-- Re-apply via `configs/omarchy/hooks/restore-idle-dim.hook` (and planned lock hook example)
+- Bar no double-click transparency: apply `configs/omarchy/overlays/bar/bar-no-doubleclick-transparency.patch` to `/usr/share/omarchy/shell/plugins/bar/Bar.qml` (disables `CenterGestureArea.onDoubleClicked` → `toggleTransparency()`; bar-off / SUPER+SHIFT+SPACE unchanged)
+- Re-apply via `configs/omarchy/hooks/post-update.d/restore-*.hook` after Omarchy updates

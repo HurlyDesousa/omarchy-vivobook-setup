@@ -1,0 +1,52 @@
+#!/bin/bash
+# Omarchy post-update hook: disable double-click empty bar center → transparency toggle.
+set -euo pipefail
+
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+PATCH_CANDIDATES=(
+  "${REPO_ROOT}/configs/omarchy/overlays/bar/bar-no-doubleclick-transparency.patch"
+  "$HOME/.local/share/omarchy-vivobook-setup/configs/omarchy/overlays/bar/bar-no-doubleclick-transparency.patch"
+  "/usr/local/share/omarchy-vivobook-setup/configs/omarchy/overlays/bar/bar-no-doubleclick-transparency.patch"
+)
+TARGET="/usr/share/omarchy/shell/plugins/bar/Bar.qml"
+BACKUP_DIR="$HOME/.local/share/omarchy/bar-no-doubleclick"
+mkdir -p "$BACKUP_DIR"
+
+PATCH=""
+for c in "${PATCH_CANDIDATES[@]}"; do
+  if [[ -n "$c" && -f "$c" ]]; then PATCH="$c"; break; fi
+done
+
+if [[ -z "$PATCH" ]]; then
+  echo "restore-vivobook-bar-no-doubleclick: no patch found; skip" >&2
+  exit 0
+fi
+
+if [[ ! -f "$TARGET" ]]; then
+  echo "restore-vivobook-bar-no-doubleclick: target missing: $TARGET" >&2
+  exit 0
+fi
+
+if [[ ! -f "$BACKUP_DIR/Bar.qml.stock" ]]; then
+  cp -a "$TARGET" "$BACKUP_DIR/Bar.qml.stock"
+fi
+
+if patch -R -p1 --dry-run -d / < "$PATCH" >/dev/null 2>&1; then
+  echo "restore-vivobook-bar-no-doubleclick: already applied"
+  exit 0
+fi
+
+if patch -N -p1 --dry-run -d / < "$PATCH" >/dev/null 2>&1; then
+  if [[ -w "$TARGET" ]]; then
+    patch -N -p1 -d / < "$PATCH"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo patch -N -p1 -d / < "$PATCH"
+  else
+    echo "restore-vivobook-bar-no-doubleclick: cannot write ${TARGET} — run with sudo" >&2
+    exit 1
+  fi
+  echo "restore-vivobook-bar-no-doubleclick: applied $PATCH"
+else
+  echo "restore-vivobook-bar-no-doubleclick: patch does not apply cleanly; manual review needed" >&2
+  exit 1
+fi
