@@ -3,6 +3,8 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
+// Stock Omarchy NightLight indicator with Vivobook right-click auto panel.
+// Left-click path is unchanged from upstream; right-click is a separate overlay.
 BarIndicator {
   id: root
 
@@ -16,8 +18,15 @@ BarIndicator {
   active: nightlightService ? nightlightService.enabled : false
   activeText: "󰔎"
   inactiveText: "󰔎"
-  activeTooltipText: autoEnabled ? "Day light (auto on)" : "Day light"
-  inactiveTooltipText: autoEnabled ? "Night light (auto on)" : "Night light"
+  activeTooltipText: "Day Light"
+  inactiveTooltipText: "Night Light"
+
+  function toggle() {
+    if (root.nightlightService) root.nightlightService.setNightlight(!root.active)
+  }
+
+  // Stock Omarchy: left-click (and any non-right press the bar routes here) toggles night light.
+  onPressed: function() { root.toggle() }
 
   function parseStatus(raw) {
     var auto = "off"
@@ -42,10 +51,6 @@ BarIndicator {
     statusProbe.running = true
   }
 
-  function toggle() {
-    if (root.nightlightService) root.nightlightService.setNightlight(!root.active)
-  }
-
   function setAuto(enabled) {
     autoSetProcess.command = ["omarchy-vivobook-nightlight-auto", enabled ? "on" : "off"]
     if (!autoSetProcess.running) autoSetProcess.running = true
@@ -68,17 +73,18 @@ BarIndicator {
     closeOptions()
   }
 
-  onPressed: function(mouse) {
-    if (mouse.button === Qt.RightButton) {
-      if (optionsOpen) closeOptions()
-      else openOptions()
-      return
-    }
-    closeOptions()
-    root.toggle()
-  }
-
   Component.onCompleted: refreshAutoState()
+
+  // Right-click only — does not intercept left button (passes through to stock onPressed).
+  MouseArea {
+    anchors.fill: parent
+    z: 1
+    acceptedButtons: Qt.RightButton
+    onClicked: {
+      if (root.optionsOpen) root.closeOptions()
+      else root.openOptions()
+    }
+  }
 
   KeyboardPanel {
     id: optionsPanel
