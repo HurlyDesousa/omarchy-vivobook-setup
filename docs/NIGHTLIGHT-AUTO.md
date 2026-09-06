@@ -52,7 +52,7 @@ omarchy-vivobook-nightlight-auto on
 Post-update hook `restore-vivobook-nightlight-auto.hook` re-applies:
 
 - `configs/omarchy/overlays/services/nightlight/Service.qml` — manual override IPC
-- `configs/omarchy/overlays/bar/indicators/NightLight.qml` — right-click auto options menu
+- `configs/omarchy/overlays/bar/indicators/NightLight.qml` — right-click auto options menu (`import Quickshell.Io` required for `Process` / `StdioCollector`)
 - Symlink `omarchy-toggle-nightlight` wrapper in `/usr/share/omarchy/bin/`
 
 Does **not** touch power/fan/bar patches from PR #7–#10.
