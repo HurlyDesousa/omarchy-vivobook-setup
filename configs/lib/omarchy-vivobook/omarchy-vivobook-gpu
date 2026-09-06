@@ -1,73 +1,49 @@
 #!/bin/bash
-# Vivobook: pin Adreno GPU to max clock only for Full Speed (governor
-# performance + min_freq=max). Power Saver, Balanced, and Performance restore
-# simple_ondemand + lowest available min_freq. Requires root for devfreq nodes.
+# Pin Adreno GPU clocks from the Vivobook tray power mode.
+# Full Speed → governor performance, min_freq = max (1250 MHz).
+# Power Saver / Balanced / Performance → simple_ondemand, min_freq restored.
 set -euo pipefail
 
-MODE_FILE="${OMARCHY_POWERPROFILES_STATE_DIR:-/home/hurly/.local/state/omarchy/powerprofiles}/vivobook-mode"
+if [[ -n "${OMARCHY_POWERPROFILES_STATE_DIR:-}" ]]; then
+  STATE_DIR="$OMARCHY_POWERPROFILES_STATE_DIR"
+elif [[ -d /home/hurly/.local/state/omarchy/powerprofiles ]]; then
+  STATE_DIR=/home/hurly/.local/state/omarchy/powerprofiles
+else
+  STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/powerprofiles"
+fi
 
-mode=""
-[[ -r $MODE_FILE ]] && mode=$(tr -d '\r\n' <"$MODE_FILE")
+MODE=""
+[[ -r $STATE_DIR/vivobook-mode ]] && MODE=$(tr -d '\r\n' <"$STATE_DIR/vivobook-mode")
+
+GPU=""
+for d in /sys/class/devfreq/*; do
+  [[ -e $d/governor ]] || continue
+  case "$(basename "$d")" in
+    *gpu*) GPU=$d; break ;;
+  esac
+done
+[[ -n $GPU && -e $GPU/governor ]] || exit 0
 
 write_sysfs() {
-  local path=$1 value=$2
-  [[ -e $path ]] || return 0
-  if [[ -w $path ]]; then
-    printf '%s\n' "$value" >"$path"
-    return 0
-  fi
-  if command -v sudo >/dev/null 2>&1; then
-    sudo -n bash -c 'printf "%s\n" "$2" >"$1"' bash "$path" "$value" 2>/dev/null && return 0
-  fi
-  return 1
+  local path=$1 val=$2
+  [[ -e $path ]] || return 1
+  printf '%s\n' "$val" >"$path"
 }
 
-read_sysfs() {
-  local path=$1
-  [[ -r $path ]] || return 1
-  tr -d '\r\n' <"$path"
-}
+max_freq=$(tr -d ' \n' <"$GPU/max_freq")
+low_freq=$max_freq
+if [[ -r $GPU/available_frequencies ]]; then
+  low_freq=$(awk '{print $1; exit}' "$GPU/available_frequencies")
+fi
 
-lowest_available_freq() {
-  local dir=$1 avail
-  avail=$(read_sysfs "$dir/available_frequencies" 2>/dev/null || true)
-  [[ -n $avail ]] || return 1
-  printf '%s\n' "${avail%% *}"
-}
-
-apply_full_speed() {
-  local dir=$1 max
-  max=$(read_sysfs "$dir/max_freq" 2>/dev/null || true)
-  [[ -n $max ]] || return 0
-  write_sysfs "$dir/governor" performance || true
-  write_sysfs "$dir/min_freq" "$max" || true
-}
-
-apply_restored() {
-  local dir=$1 min
-  write_sysfs "$dir/governor" simple_ondemand || true
-  min=$(lowest_available_freq "$dir" || true)
-  [[ -n $min ]] && write_sysfs "$dir/min_freq" "$min" || true
-}
-
-shopt -s nullglob
-dirs=(/sys/class/devfreq/*gpu*)
-[[ ${#dirs[@]} -gt 0 ]] || exit 0
-
-case "$mode" in
+case "$MODE" in
   full-speed)
-    for dir in "${dirs[@]}"; do
-      [[ -d $dir ]] || continue
-      apply_full_speed "$dir"
-    done
-    ;;
-  power-saver|balanced|performance)
-    for dir in "${dirs[@]}"; do
-      [[ -d $dir ]] || continue
-      apply_restored "$dir"
-    done
+    write_sysfs "$GPU/governor" performance
+    write_sysfs "$GPU/min_freq" "$max_freq"
     ;;
   *)
-    exit 0
+    write_sysfs "$GPU/min_freq" "$low_freq"
+    write_sysfs "$GPU/governor" simple_ondemand
     ;;
 esac
+exit 0

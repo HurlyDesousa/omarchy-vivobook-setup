@@ -4,11 +4,10 @@
 # Never stops x1e-ec-tool.service.
 #
 # Performance / Full Speed request PPD's max-performance CPU profile
-# (`performance`). Only Full Speed pins the Adreno GPU (via apply_gpu_policy);
-# Performance leaves GPU on the default devfreq policy. This Snapdragon PPD
-# often only exposes power-saver and balanced (placeholder driver); in that
-# case we pin CPUFreq to the `performance` governor — the same policy PPD
-# would apply.
+# (`performance`). Full Speed also pins the Adreno GPU to its max clock.
+# This Snapdragon PPD often only exposes power-saver and balanced
+# (placeholder driver); in that case we pin CPUFreq to the `performance`
+# governor — the same policy PPD would apply.
 set -euo pipefail
 REAL=/usr/bin/omarchy-powerprofiles-set
 REAL_LIST=/usr/bin/omarchy-powerprofiles-list
