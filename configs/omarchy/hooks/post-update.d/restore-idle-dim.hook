@@ -5,6 +5,13 @@
 # Do NOT raise lock/screensaver; do NOT use ~10% dim. Never stop x1e-ec-tool.
 set -euo pipefail
 
+for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
+               "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
+  [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
+    source "${_vb_lib}"; vivobook_ensure_user_home; break; }
+done
+[[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
+
 TARGET="/usr/share/omarchy/shell/plugins/services/idle/Service.qml"
 PATCHED="${HOME}/.local/share/omarchy/idle-dim/Service.qml"
 HELPER="${HOME}/.local/bin/omarchy-idle-dim"

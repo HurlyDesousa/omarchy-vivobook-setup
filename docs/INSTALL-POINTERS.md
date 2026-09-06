@@ -2,6 +2,12 @@
 
 Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sources.
 
+## Running install scripts
+
+- **Do not run as bare root** (`su -` / `sudo -i` then `./install-all.sh`) — `HOME` would be `/root` and user overlays would land in the wrong place.
+- **`sudo ./scripts/install-all.sh` from hurly’s shell is OK** — installs always target `/home/hurly` (or `SUDO_USER`’s home). System paths (`/usr/share`, `/etc`, `/usr/local`) still use sudo where needed.
+- Override with `OMARCHY_HOME` or `TARGET_HOME` if needed.
+
 ## omarchy-task-manager (TM)
 - Repo: https://github.com/HurlyDesousa/omarchy-task-manager
 - Install SHA (live HEAD): `1e63b1f4fc7f347d94b4837625b53588495a27af` (short `1e63b1f`)
