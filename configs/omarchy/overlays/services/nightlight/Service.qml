@@ -53,11 +53,16 @@ Item {
   }
 
   function runApply(temp) {
+    var target = Number(temp)
     applyProcess.command = ["bash", "-lc",
+      "TARGET=" + target + "; " +
       "pgrep -x hyprsunset >/dev/null || { setsid uwsm-app -- hyprsunset >/dev/null 2>&1 & sleep 1; }; " +
-      (Number(temp) >= NightlightModel.IDENTITY_TEMPERATURE
-        ? "hyprctl hyprsunset identity"
-        : "hyprctl hyprsunset temperature " + Number(temp))]
+      "for _ in {1..10}; do " +
+      "hyprctl hyprsunset temperature ${TARGET} >/dev/null 2>&1; " +
+      "sleep 0.2; " +
+      "CURRENT=$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' | head -n1); " +
+      "[ \"${CURRENT}\" = \"${TARGET}\" ] && break; " +
+      "done"]
     applyProcess.running = true
   }
 
