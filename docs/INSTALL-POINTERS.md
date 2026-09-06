@@ -8,6 +8,13 @@ Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sourc
 - Local checkout used: `~/src/omarchy-task-manager/`
 - Install: run repo `install.sh` (ships `~/.local/bin/omarchy-task-manager*` + plugins under `~/.config/omarchy/plugins/sw.art.task-manager/`)
 
+## Login autostart (`sw.art.autostart`)
+- Backend CLI: `~/.local/bin/omarchy-autostart-apps` (not vendored — copy from live system or rebuild from your autostart helper repo)
+- Config: `configs/omarchy/autostart-apps.json` → `~/.config/omarchy/autostart-apps.json`
+- Plugin: `configs/omarchy/plugins/sw.art.autostart/` → `~/.config/omarchy/plugins/sw.art.autostart/`
+- Hypr block: `configs/hypr/autostart.lua.fragment` (live snapshot; `omarchy-autostart-apps apply` regenerates when CLI is present)
+- Post-update: `restore-vivobook-autostart.hook`
+
 ## Cursor IDE (AppImage — exclude binary from tarball)
 - Live: `~/.local/opt/cursor/Cursor-3.19.13-aarch64.AppImage` (~282M) → symlink `~/.local/bin/cursor`
 - Prefer Cursor download API / official aarch64 AppImage for Linux ARM64 rather than copying the AppImage
@@ -32,5 +39,6 @@ Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sourc
 - Idle dim: apply `configs/quickshell/idle.patch` to `/usr/share/omarchy/shell/plugins/services/idle/Service.qml`
 - Lock lid harden: apply `configs/quickshell/lock-lidharden.patch` to `/usr/share/omarchy/shell/plugins/lock/Service.qml`
 - Bar no double-click transparency: apply `configs/omarchy/overlays/bar/bar-no-doubleclick-transparency.patch` to `/usr/share/omarchy/shell/plugins/bar/Bar.qml` (disables `CenterGestureArea.onDoubleClicked` → `toggleTransparency()`; bar-off / SUPER+SHIFT+SPACE unchanged)
-- Auto night light (Berlin hyprsunset): overlays under `configs/omarchy/overlays/services/nightlight/` + `bar/indicators/` — see `docs/NIGHTLIGHT-AUTO.md`
+- Auto night light (Berlin hyprsunset): overlays under `configs/omarchy/overlays/services/nightlight/` + `bar/indicators/` — see `docs/NIGHTLIGHT-AUTO.md`; toggle wrapper `configs/lib/omarchy-vivobook/omarchy-toggle-nightlight`
+- Login autostart bar widget: `configs/omarchy/plugins/sw.art.autostart/` + `autostart-apps.json` — see Login autostart above
 - Re-apply via `configs/omarchy/hooks/post-update.d/restore-*.hook` after Omarchy updates

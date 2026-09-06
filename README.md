@@ -58,8 +58,8 @@ Until the inventory merge, these are the documented targets. Placeholder configs
 
 ### Hyprland
 
-- `autostart.lua`: float-only rule for `art.sw.omarchy.TaskManager` — no size/move clamp
-- See `configs/hypr/autostart.lua.fragment`
+- `autostart.lua`: task-manager float rule + login autostart block (Cursor ws1 … Opera ws6)
+- See `configs/hypr/autostart.lua.fragment` and `configs/omarchy/autostart-apps.json`
 
 ### Omarchy shell (`shell.json`)
 

@@ -22,14 +22,15 @@ omarchy-vivobook-nightlight-auto on
 ```
 
 - **Sunrise** → `hyprctl hyprsunset identity` (day)
-- **Sunset** → `4000K` (night)
+- **Sunset** → saved night temperature (default `4000K`, adjustable 2500–5500K)
 - Daily refresh at 00:05 (`omarchy-vivobook-nightlight-auto.timer`) regenerates today's civil times.
 
 ## Controls
 
 | Action | How |
 |--------|-----|
-| Manual on/off | **Left-click** bar night-light indicator (stock Omarchy toggle), `SUPER+CTRL+N`, or `omarchy-toggle-nightlight` — unchanged from upstream |
+| Manual on/off | **Left-click** bar night-light indicator, `SUPER+CTRL+N`, or `omarchy-toggle-nightlight` — uses saved warmth via `now-on` / `now-off` |
+| Warmth | `omarchy-vivobook-nightlight-auto temp [K]` or `amount [0-100]` |
 | Auto on/off | **Right-click** bar night-light indicator → Auto toggle panel, or `omarchy-vivobook-nightlight-auto on` / `off` / `toggle` |
 | Status | `omarchy-vivobook-nightlight-auto status` (panel shows today's sunrise/sunset when Auto is on) |
 | Disable auto | `omarchy-vivobook-nightlight-auto off` → restores stock `hyprsunset.conf` via `omarchy-refresh-hyprsunset` |
@@ -53,6 +54,8 @@ While auto is on, a manual left-click or keybind sets a **manual override** unti
 
 - `auto` — `on` / `off` (default `off`)
 - `manual_override` — `on` / `off` while auto is on and user toggled manually
+- `temperature` — night warmth in Kelvin (2500–5500)
+- `filter` — last known on/off state for warmth sync
 - `hyprsunset.conf.stock` — backup before first auto regen
 
 ## systemd (user)

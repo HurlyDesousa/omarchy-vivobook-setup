@@ -1,8 +1,6 @@
-# Placeholder for Omarchy bar plugin config stubs.
-# TODO: INVENTORY — symlink or copy from omarchy-task-manager after install.
+# Omarchy bar plugin stubs shipped by this repo.
 #
-# Expected plugins (from omarchy-task-manager):
-#   - task-manager
-#   - kbd-backlight
+#   sw.art.autostart/   — login autostart bar widget (needs omarchy-autostart-apps CLI)
 #
-# install-all.sh enables plugins under ~/.config/omarchy/plugins/
+# Other plugins (task-manager, kbd-backlight) come from omarchy-task-manager install.
+# install-all.sh symlinks/copies plugins under ~/.config/omarchy/plugins/

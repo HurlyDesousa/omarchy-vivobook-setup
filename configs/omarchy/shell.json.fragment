@@ -63,6 +63,9 @@
         },
         {
           "id": "omarchy.power"
+        },
+        {
+          "id": "sw.art.autostart"
         }
       ]
     },
