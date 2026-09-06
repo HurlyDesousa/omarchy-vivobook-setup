@@ -1,0 +1,15 @@
+--- a/usr/share/omarchy/shell/plugins/bar/Bar.qml
++++ b/usr/share/omarchy/shell/plugins/bar/Bar.qml
+@@ -1479,10 +1479,8 @@
+         suppressClick = false
+         return
+       }
+-      if (mouse.button === Qt.LeftButton) {
+-        root.toggleTransparency()
+-        mouse.accepted = true
+-      }
++      // Vivobook: no double-click transparency toggle on empty bar center.
++      mouse.accepted = true
+     }
+   }
+ 

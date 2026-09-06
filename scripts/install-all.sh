@@ -282,6 +282,33 @@ main() {
   else
     warn "No configs/quickshell/lock-lidharden.patch — TODO: INVENTORY"
   fi
+
+  BAR_NO_DBLCLICK_PATCH="${CONFIGS_DIR}/omarchy/overlays/bar/bar-no-doubleclick-transparency.patch"
+  BAR_TARGET="/usr/share/omarchy/shell/plugins/bar/Bar.qml"
+  if [[ -f "${BAR_NO_DBLCLICK_PATCH}" ]]; then
+    if [[ -f "${BAR_TARGET}" ]]; then
+      if patch -R -p1 --dry-run -d / < "${BAR_NO_DBLCLICK_PATCH}" >/dev/null 2>&1; then
+        ok "Bar no-doubleclick transparency patch already applied"
+      elif patch -N -p1 --dry-run -d / < "${BAR_NO_DBLCLICK_PATCH}" >/dev/null 2>&1; then
+        info "Applying bar no-doubleclick transparency patch…"
+        if [[ -w "${BAR_TARGET}" ]]; then
+          patch -N -p1 -d / < "${BAR_NO_DBLCLICK_PATCH}" && ok "bar no-doubleclick transparency" \
+            || warn "Bar no-doubleclick transparency patch failed; run restore-vivobook-bar-no-doubleclick.hook"
+        elif command -v sudo >/dev/null 2>&1; then
+          sudo patch -N -p1 -d / < "${BAR_NO_DBLCLICK_PATCH}" && ok "bar no-doubleclick transparency (sudo)" \
+            || warn "Bar no-doubleclick transparency patch failed; run restore-vivobook-bar-no-doubleclick.hook with sudo"
+        else
+          warn "Bar target ${BAR_TARGET} not writable — apply via restore-vivobook-bar-no-doubleclick.hook (may need sudo)"
+        fi
+      else
+        warn "Bar no-doubleclick transparency patch does not apply cleanly; run restore-vivobook-bar-no-doubleclick.hook after Omarchy update"
+      fi
+    else
+      warn "Bar target ${BAR_TARGET} missing — apply via restore-vivobook-bar-no-doubleclick.hook after Omarchy base install"
+    fi
+  else
+    warn "No configs/omarchy/overlays/bar/bar-no-doubleclick-transparency.patch — TODO: INVENTORY"
+  fi
   echo
 
   # 7b. Omarchy post-update hooks (re-apply patches after omarchy updates)
@@ -380,6 +407,14 @@ main() {
     "${PANEL_HOOK}" || warn "restore-vivobook-power-panel.hook failed (sudo may be required for /usr/share/omarchy/shell/plugins/panels/power/)"
   else
     warn "restore-vivobook-power-panel.hook not installed yet — re-run after hooks section"
+  fi
+
+  BAR_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-bar-no-doubleclick.hook"
+  if [[ -x "${BAR_HOOK}" ]]; then
+    info "Running restore-vivobook-bar-no-doubleclick.hook…"
+    "${BAR_HOOK}" || warn "restore-vivobook-bar-no-doubleclick.hook failed (sudo may be required for /usr/share/omarchy/shell/plugins/bar/Bar.qml)"
+  else
+    warn "restore-vivobook-bar-no-doubleclick.hook not installed yet — re-run after hooks section"
   fi
   echo
 
