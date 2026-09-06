@@ -75,11 +75,15 @@ BarIndicator {
 
   Component.onCompleted: refreshAutoState()
 
-  // Right-click only — does not intercept left button (passes through to stock onPressed).
+  // Right-click only — propagate left button to stock onPressed below.
   MouseArea {
     anchors.fill: parent
     z: 1
     acceptedButtons: Qt.RightButton
+    propagateComposedEvents: true
+    onPressed: function(mouse) {
+      if (mouse.button !== Qt.RightButton) mouse.accepted = false
+    }
     onClicked: {
       if (root.optionsOpen) root.closeOptions()
       else root.openOptions()
