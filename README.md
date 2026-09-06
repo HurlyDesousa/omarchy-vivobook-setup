@@ -60,7 +60,7 @@ Until the inventory merge, these are the documented targets. Placeholder configs
 
 ### Hyprland
 
-- `autostart.lua`: task-manager float rule + login autostart block (Cursor ws1 … Opera ws6, Firefox ws7)
+- `autostart.lua`: task-manager float rule + login autostart block (Cursor ws1 … Opera ws6, Firefox ws7); **10s Wi-Fi settle delay** before app launches (`delay_seconds` in `autostart-apps.json`)
 - See `configs/hypr/autostart.lua.fragment` and `configs/omarchy/autostart-apps.json`
 
 ### Omarchy shell (`shell.json`)
