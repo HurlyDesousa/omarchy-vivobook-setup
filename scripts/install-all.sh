@@ -418,6 +418,43 @@ main() {
   fi
   echo
 
+  # 7d. Vivobook auto night light (hyprsunset Berlin schedule)
+  info "=== Vivobook auto night light ==="
+  VIVOBOOK_LIB="${HOME}/.local/lib/omarchy-vivobook"
+  mkdir -p "${VIVOBOOK_LIB}"
+  apply_fragment \
+    "${CONFIGS_DIR}/lib/omarchy-vivobook/omarchy-toggle-nightlight" \
+    "${VIVOBOOK_LIB}/omarchy-toggle-nightlight" \
+    "vivobook omarchy-toggle-nightlight wrapper"
+  chmod +x "${VIVOBOOK_LIB}/omarchy-toggle-nightlight" 2>/dev/null || true
+
+  nightlight_state="${HOME}/.local/state/omarchy/nightlight"
+  ensure_state_dir "${nightlight_state}"
+  if [[ ! -f "${nightlight_state}/auto" && -f "${CONFIGS_DIR}/state/nightlight/auto.default" ]]; then
+    cp "${CONFIGS_DIR}/state/nightlight/auto.default" "${nightlight_state}/auto"
+    ok "nightlight auto default → ${nightlight_state}/auto"
+  elif [[ -f "${nightlight_state}/auto" ]]; then
+    ok "nightlight auto state present (keeping live values)"
+  fi
+
+  NL_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-nightlight-auto.hook"
+  if [[ -x "${NL_HOOK}" ]]; then
+    info "Running restore-vivobook-nightlight-auto.hook…"
+    "${NL_HOOK}" || warn "restore-vivobook-nightlight-auto.hook failed (sudo may be required for /usr/share/omarchy/shell/plugins/)"
+  else
+    warn "restore-vivobook-nightlight-auto.hook not installed yet — re-run after hooks section"
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user enable omarchy-vivobook-nightlight-auto.timer 2>/dev/null \
+      || warn "Could not enable omarchy-vivobook-nightlight-auto.timer (no user session?)"
+    systemctl --user enable omarchy-vivobook-nightlight-auto-apply.service 2>/dev/null \
+      || warn "Could not enable omarchy-vivobook-nightlight-auto-apply.service"
+    systemctl --user start omarchy-vivobook-nightlight-auto.timer 2>/dev/null \
+      || warn "Could not start omarchy-vivobook-nightlight-auto.timer"
+  fi
+  echo
+
   # 8. x1e-ec-tool reminder
   info "=== x1e-ec-tool ==="
   if [[ -x "${HOME}/src/x1e-ec-tool/install.sh" ]]; then

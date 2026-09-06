@@ -32,4 +32,5 @@ Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sourc
 - Idle dim: apply `configs/quickshell/idle.patch` to `/usr/share/omarchy/shell/plugins/services/idle/Service.qml`
 - Lock lid harden: apply `configs/quickshell/lock-lidharden.patch` to `/usr/share/omarchy/shell/plugins/lock/Service.qml`
 - Bar no double-click transparency: apply `configs/omarchy/overlays/bar/bar-no-doubleclick-transparency.patch` to `/usr/share/omarchy/shell/plugins/bar/Bar.qml` (disables `CenterGestureArea.onDoubleClicked` → `toggleTransparency()`; bar-off / SUPER+SHIFT+SPACE unchanged)
+- Auto night light (Berlin hyprsunset): overlays under `configs/omarchy/overlays/services/nightlight/` + `bar/indicators/` — see `docs/NIGHTLIGHT-AUTO.md`
 - Re-apply via `configs/omarchy/hooks/post-update.d/restore-*.hook` after Omarchy updates

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Berlin night-light schedule refresh
+
+[Timer]
+OnCalendar=*-*-* 00:05:00
+Persistent=true
+Unit=omarchy-vivobook-nightlight-auto.service
+
+[Install]
+WantedBy=timers.target
