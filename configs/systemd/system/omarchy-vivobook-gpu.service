@@ -1,5 +1,5 @@
 [Unit]
-Description=Vivobook GPU max clock pin (Performance / Full Speed)
+Description=Vivobook GPU max clock pin (Full Speed only)
 After=multi-user.target
 
 [Service]

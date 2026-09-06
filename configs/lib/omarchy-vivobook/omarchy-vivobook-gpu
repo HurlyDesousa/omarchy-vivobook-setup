@@ -1,22 +1,73 @@
 #!/bin/bash
-# Vivobook: pin Adreno GPU to max clock (1250 MHz) for Performance / Full Speed.
-# No-op for power-saver / balanced. Requires root for kgsl devfreq nodes.
+# Vivobook: pin Adreno GPU to max clock only for Full Speed (governor
+# performance + min_freq=max). Power Saver, Balanced, and Performance restore
+# simple_ondemand + lowest available min_freq. Requires root for devfreq nodes.
 set -euo pipefail
 
 MODE_FILE="${OMARCHY_POWERPROFILES_STATE_DIR:-/home/hurly/.local/state/omarchy/powerprofiles}/vivobook-mode"
-GPU_MIN=/sys/class/kgsl/kgsl-3d0/devfreq/min_freq
-GPU_MAX=/sys/class/kgsl/kgsl-3d0/devfreq/max_freq
-TARGET_HZ=1250000000
 
 mode=""
 [[ -r $MODE_FILE ]] && mode=$(tr -d '\r\n' <"$MODE_FILE")
 
+write_sysfs() {
+  local path=$1 value=$2
+  [[ -e $path ]] || return 0
+  if [[ -w $path ]]; then
+    printf '%s\n' "$value" >"$path"
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -n bash -c 'printf "%s\n" "$2" >"$1"' bash "$path" "$value" 2>/dev/null && return 0
+  fi
+  return 1
+}
+
+read_sysfs() {
+  local path=$1
+  [[ -r $path ]] || return 1
+  tr -d '\r\n' <"$path"
+}
+
+lowest_available_freq() {
+  local dir=$1 avail
+  avail=$(read_sysfs "$dir/available_frequencies" 2>/dev/null || true)
+  [[ -n $avail ]] || return 1
+  printf '%s\n' "${avail%% *}"
+}
+
+apply_full_speed() {
+  local dir=$1 max
+  max=$(read_sysfs "$dir/max_freq" 2>/dev/null || true)
+  [[ -n $max ]] || return 0
+  write_sysfs "$dir/governor" performance || true
+  write_sysfs "$dir/min_freq" "$max" || true
+}
+
+apply_restored() {
+  local dir=$1 min
+  write_sysfs "$dir/governor" simple_ondemand || true
+  min=$(lowest_available_freq "$dir" || true)
+  [[ -n $min ]] && write_sysfs "$dir/min_freq" "$min" || true
+}
+
+shopt -s nullglob
+dirs=(/sys/class/devfreq/*gpu*)
+[[ ${#dirs[@]} -gt 0 ]] || exit 0
+
 case "$mode" in
-  performance|full-speed) ;;
-  *) exit 0 ;;
+  full-speed)
+    for dir in "${dirs[@]}"; do
+      [[ -d $dir ]] || continue
+      apply_full_speed "$dir"
+    done
+    ;;
+  power-saver|balanced|performance)
+    for dir in "${dirs[@]}"; do
+      [[ -d $dir ]] || continue
+      apply_restored "$dir"
+    done
+    ;;
+  *)
+    exit 0
+    ;;
 esac
-
-[[ -w $GPU_MIN && -w $GPU_MAX ]] || exit 0
-
-printf '%s\n' "$TARGET_HZ" >"$GPU_MIN"
-printf '%s\n' "$TARGET_HZ" >"$GPU_MAX"
