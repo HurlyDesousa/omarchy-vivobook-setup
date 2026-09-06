@@ -1,6 +1,6 @@
 # Vivobook power profiles (Omarchy overlay)
 
-ASUS Vivobook S15 (`S5507QA`, Snapdragon X Elite) adds two **synthetic** power modes on top of stock Omarchy / `power-profiles-daemon` (PPD): **Performance** and **Full Speed**. Both request PPD’s max-performance CPU profile (`performance`) and drive different `x1e-ec-tool` fan curves; only **Full Speed** pins the Adreno GPU to max clock. This SoC’s PPD often only exposes `power-saver` and `balanced` (placeholder driver); in that case the wrapper pins CPUFreq to the `performance` governor.
+ASUS Vivobook S15 (`S5507QA`, Snapdragon X Elite) adds two **synthetic** power modes on top of stock Omarchy / `power-profiles-daemon` (PPD): **Performance** and **Full Speed**. Both request PPD’s max-performance CPU profile (`performance`) and drive different `x1e-ec-tool` fan curves. **Full Speed** also pins the Adreno GPU to its max clock; Performance does not. This SoC’s PPD often only exposes `power-saver` and `balanced` (placeholder driver); in that case the wrapper pins CPUFreq to the `performance` governor.
 
 ## Prerequisites
 
@@ -43,8 +43,8 @@ Explicit tray picks always pass a profile slug and override these defaults until
 |------------------|---------------------|---------------------|-------------|
 | Power Saver      | PPD `power-saver` | 0                   | Whisper     |
 | Balanced         | PPD `balanced`    | 1                   | Standard    |
-| Performance      | PPD `performance` (else CPUFreq `performance`); GPU on default devfreq | 2 | Performance |
-| Full Speed | PPD `performance` (else CPUFreq `performance`); GPU pinned to max (governor `performance`, min=max) | 3 | Full speed — **manual max RPM** (not the auto curve) |
+| Performance      | PPD `performance` (else CPUFreq `performance`); GPU scales | 2 | Performance |
+| Full Speed | PPD `performance` (else CPUFreq `performance`); **GPU pinned to 1250 MHz** | 3 | Full speed — **manual max RPM** (not the auto curve) |
 
 Active Vivobook mode is stored in `~/.local/state/omarchy/powerprofiles/vivobook-mode`. Per-context PPD state (`ac` / `battery`) is written under the same directory when synthetic modes bypass the stock setter.
 
@@ -54,7 +54,7 @@ Active Vivobook mode is stored in `~/.local/state/omarchy/powerprofiles/vivobook
 |------|------|
 | `configs/lib/omarchy-vivobook/omarchy-powerprofiles-list` | Lists real PPD profiles plus `performance` and `full-speed` |
 | `configs/lib/omarchy-vivobook/omarchy-powerprofiles-set` | Maps modes to PPD + EC; AC/battery auto defaults; never stops `x1e-ec-tool.service` |
-| `configs/lib/omarchy-vivobook/omarchy-vivobook-gpu` | Pins Adreno GPU max clock for Full Speed only; restores devfreq for other modes |
+| `configs/lib/omarchy-vivobook/omarchy-vivobook-gpu` | Pins Adreno GPU max clock for Full Speed only; restores ondemand otherwise |
 | `configs/systemd/system/omarchy-vivobook-gpu.service` / `.path` | Root oneshot when `vivobook-mode` changes |
 | `configs/udev/99-omarchy-vivobook-powerprofiles.rules` | AC plug/unplug → autodetect service |
 | `configs/systemd/system/omarchy-vivobook-powerprofiles-autodetect.service` | systemd oneshot unit |
