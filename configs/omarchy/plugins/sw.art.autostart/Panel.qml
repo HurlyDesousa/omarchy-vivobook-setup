@@ -22,6 +22,7 @@ Panel {
     property string query: ""
     property bool catalogLoaded: false
     property bool autostartOn: true
+    property int delaySeconds: 0
 
     readonly property string toggleHint: autostartOn ? "Turn autostart off" : "Turn autostart on"
     readonly property string heroStatusText: {
@@ -30,10 +31,11 @@ Panel {
         if (picking)
             return "Pick an app"
         if (apps.length === 0)
-            return "None yet"
-        if (apps.length === 1)
-            return "1 app"
-        return apps.length + " apps"
+            return delaySeconds > 0 ? "None yet · " + delaySeconds + "s delay" : "None yet"
+        var count = apps.length === 1 ? "1 app" : apps.length + " apps"
+        if (delaySeconds > 0)
+            return count + " · " + delaySeconds + "s delay"
+        return count
     }
 
     readonly property var filteredCatalog: {
@@ -103,6 +105,7 @@ Panel {
             var data = JSON.parse(raw)
             apps = Array.isArray(data.apps) ? data.apps : []
             autostartOn = data.enabled !== false
+            delaySeconds = Math.max(0, Number(data.delay_seconds) || 0)
         } catch (e) {
         }
     }
