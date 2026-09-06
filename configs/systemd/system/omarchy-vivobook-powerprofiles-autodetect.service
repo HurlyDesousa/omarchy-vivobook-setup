@@ -1,5 +1,5 @@
 [Unit]
-Description=Vivobook power profile autodetect (AC→performance, battery→power-saver)
+Description=Vivobook power profile autodetect (AC→balanced, battery→power-saver)
 After=upower.service
 Wants=upower.service
 

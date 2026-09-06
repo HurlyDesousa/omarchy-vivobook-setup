@@ -27,7 +27,7 @@ When Omarchy calls `omarchy-powerprofiles-set` with `ac` or `battery` and **no e
 
 | Power context | Default mode   | EC profile |
 |---------------|----------------|------------|
-| AC            | `performance`  | 2          |
+| AC            | `balanced`     | 1          |
 | Battery       | `power-saver`  | 0          |
 
 Event-driven re-apply:
@@ -55,10 +55,12 @@ Active Vivobook mode is stored in `~/.local/state/omarchy/powerprofiles/vivobook
 | `configs/lib/omarchy-vivobook/omarchy-powerprofiles-list` | Lists real PPD profiles plus `performance` and `full-speed` |
 | `configs/lib/omarchy-vivobook/omarchy-powerprofiles-set` | Maps modes to PPD + EC; AC/battery auto defaults; never stops `x1e-ec-tool.service` |
 | `configs/lib/omarchy-vivobook/omarchy-vivobook-powerprofiles-autodetect` | Oneshot entrypoint → wrapped `autodetect` |
+| `configs/bin/omarchy-battery-status` | Qualcomm battmgr-aware battery status (`--shell` for power panel) |
 | `configs/udev/99-omarchy-vivobook-powerprofiles.rules` | AC plug/unplug → autodetect service |
 | `configs/systemd/system/omarchy-vivobook-powerprofiles-autodetect.service` | systemd oneshot unit |
 | `~/.local/lib/omarchy-vivobook/` | Installed copies (chmod +x) |
 | `/usr/share/omarchy/bin/omarchy-powerprofiles-*` | Symlinks restored by `restore-vivobook-powerprofiles.hook` |
+| `/usr/share/omarchy/bin/omarchy-battery-status` | Symlink restored by `restore-vivobook-battery-status.hook` |
 
 ## Power panel QML polish
 
@@ -79,6 +81,7 @@ Additional polish:
 - **Wrappers not used after Omarchy update:** run `~/.config/omarchy/hooks/post-update.d/restore-vivobook-powerprofiles.hook` or re-run `./scripts/install-all.sh`
 - **Tray still shows `Full-speed` or single row:** run `restore-vivobook-power-panel.hook` (may need sudo), then `omarchy-restart-shell`
 - **Wrong profile after plug/unplug:** confirm udev rule and `omarchy-vivobook-powerprofiles-autodetect.service` are installed (`./scripts/install-all.sh` with sudo)
+- **Battery percentage blank at 100%:** confirm `omarchy-battery-status` is the Vivobook wrapper (`restore-vivobook-battery-status.hook` or re-run `./scripts/install-all.sh`)
 - **Fans unchanged:** confirm `x1e-ec-tool.service` is active and `/usr/local/bin/x1e-ec-tool profile N` works
 - **PPD warning on synthetic modes:** expected if PPD rejects a repeat set; EC profile is still applied
 

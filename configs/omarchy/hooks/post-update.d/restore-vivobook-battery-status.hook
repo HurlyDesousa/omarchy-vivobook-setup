@@ -1,0 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+BIN=/home/hurly/.local/bin/omarchy-battery-status
+SHARE_BIN=/usr/share/omarchy/bin
+[[ -x "$BIN" ]] || exit 0
+ln -sfn "$BIN" "$SHARE_BIN/omarchy-battery-status"
