@@ -364,6 +364,14 @@ main() {
   else
     warn "restore-vivobook-power-panel.hook not installed yet — re-run after hooks section"
   fi
+
+  BATT_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-battery-status.hook"
+  if [[ -x "${BATT_HOOK}" ]]; then
+    info "Running restore-vivobook-battery-status.hook…"
+    "${BATT_HOOK}" || warn "restore-vivobook-battery-status.hook failed (may need omarchy base install or sudo for /usr/share/omarchy/bin)"
+  else
+    warn "restore-vivobook-battery-status.hook not installed yet — re-run after hooks section"
+  fi
   echo
 
   # 8. x1e-ec-tool reminder

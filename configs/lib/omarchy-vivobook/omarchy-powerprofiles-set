@@ -1,6 +1,6 @@
 #!/bin/bash
 # Vivobook: PPD + x1e-ec-tool fan profiles.
-# Defaults: AC → performance (EC 2), battery → power-saver (EC 0 Whisper).
+# Defaults: AC → balanced (EC 1), battery → power-saver (EC 0 Whisper).
 # Never stops x1e-ec-tool.service.
 set -euo pipefail
 REAL=/usr/bin/omarchy-powerprofiles-set
@@ -42,7 +42,7 @@ if [[ -z ${requested:-} ]]; then
   if [[ $action == battery ]]; then
     requested=power-saver
   else
-    requested=performance
+    requested=balanced
   fi
 fi
 
