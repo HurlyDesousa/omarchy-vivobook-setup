@@ -60,7 +60,7 @@ Until the inventory merge, these are the documented targets. Placeholder configs
 
 ### Hyprland
 
-- `autostart.lua`: task-manager float rule + login autostart block (Cursor ws1 … Firefox ws7, Brave WhatsApp ws8, TradingView ws9); **10s Wi-Fi settle delay** before app launches (`delay_seconds` in `autostart-apps.json`). Brave PWAs use site-specific `class` values (e.g. `brave-web.whatsapp.com__-Default`).
+- `autostart.lua`: task-manager float rule + LIVE login autostart (Discord/Telegram/WhatsApp ws1, Thunderbird ws2, Brave ws4 … Cursor ws8, TradingView ws9); **10s Wi-Fi settle delay** (`delay_seconds: 10`). Web apps use site-specific `class` values; Hypr rules include Brave + Chrome fallbacks.
 - See `configs/hypr/autostart.lua.fragment` and `configs/omarchy/autostart-apps.json`
 
 ### Omarchy shell (`shell.json`)
