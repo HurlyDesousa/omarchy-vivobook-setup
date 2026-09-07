@@ -57,7 +57,7 @@ print_status() {
 }
 
 mode=""
- if [[ "${1:-}" == "--status" || "${1:-}" == "--dry-run" ]]; then
+if [[ "${1:-}" == "--status" || "${1:-}" == "--dry-run" ]]; then
   mode="$1"
   shift
 fi
