@@ -19,7 +19,8 @@ Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sourc
 - Config: `configs/omarchy/autostart-apps.json` → `~/.config/omarchy/autostart-apps.json`
 - Plugin: `configs/omarchy/plugins/sw.art.autostart/` → `~/.config/omarchy/plugins/sw.art.autostart/`
 - Hypr block: `configs/hypr/autostart.lua.fragment` (live snapshot; `omarchy-autostart-apps apply` regenerates when CLI is present)
-- App order: Cursor ws1, Thunderbird ws2, Telegram ws3, Brave ws4, Chromium ws5, Opera ws6 (`class` `Opera`), Firefox ws7 (`exec` `/usr/lib/firefox/firefox`)
+- App order: Cursor ws1, Thunderbird ws2, Telegram ws3, Brave ws4, Chromium ws5, Opera ws6 (`class` `Opera`), Firefox ws7 (`exec` `/usr/lib/firefox/firefox`), WhatsApp ws8 (`class` `brave-web.whatsapp.com__-Default`), TradingView ws9 (`class` `brave-www.tradingview.com__chart_-Default`)
+- Brave PWA `class` values come from `hyprctl clients` / the installed `.desktop` `StartupWMClass`; Hypr `o.window` regexes escape `-` and `.` (e.g. `^brave\\-web\\.whatsapp\\.com__\\-Default$`)
 - Wi-Fi settle: top-level `delay_seconds` (default **10**) — Hypr block waits that long after login before launching apps (`hl.timer` oneshot, `timeout = delay_seconds * 1000`). Set `0` or omit for immediate launch.
 - Post-update: `restore-vivobook-autostart.hook`
 

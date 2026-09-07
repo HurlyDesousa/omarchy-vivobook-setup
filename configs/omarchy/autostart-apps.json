@@ -57,6 +57,22 @@
       "exec": "/usr/lib/firefox/firefox",
       "class": "firefox",
       "workspace": 7
+    },
+    {
+      "id": "brave-web.whatsapp.com__-Default",
+      "desktop": "brave-web.whatsapp.com__-Default.desktop",
+      "name": "WhatsApp",
+      "exec": "brave --profile-directory=Default --app=https://web.whatsapp.com",
+      "class": "brave-web.whatsapp.com__-Default",
+      "workspace": 8
+    },
+    {
+      "id": "brave-www.tradingview.com__chart_-Default",
+      "desktop": "brave-www.tradingview.com__chart_-Default.desktop",
+      "name": "TradingView",
+      "exec": "brave --profile-directory=Default --app=https://www.tradingview.com/chart/",
+      "class": "brave-www.tradingview.com__chart_-Default",
+      "workspace": 9
     }
   ]
 }
