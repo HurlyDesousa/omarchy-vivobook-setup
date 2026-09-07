@@ -43,3 +43,8 @@ if command -v omarchy-autostart-apps >/dev/null 2>&1; then
 elif [[ -f "${HYPR_SRC}" ]]; then
   install_file "${HYPR_SRC}" "${HYPR_DEST}"
 fi
+
+YT_HOOK="$(cd "$(dirname "$0")" && pwd)/restore-vivobook-youtube-chromium.hook"
+if [[ -x "${YT_HOOK}" ]]; then
+  "${YT_HOOK}" || true
+fi
