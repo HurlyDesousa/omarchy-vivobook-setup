@@ -39,6 +39,13 @@ Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sourc
 - Omarchy wrapper unit: `configs/bin/omarchy-llama-server` + `configs/systemd/user/omarchy-llama-server.service`
 - **GGUF excluded** — use `scripts/fetch-gguf.sh` / `docs/GGUF.md`; live model was `~/.local/share/llm/Qwen2.5-3B-Instruct-Q4_K_M.gguf`
 
+## AudioReach topology (HOLD — not in install-all.sh)
+- Package: `packages/audioreach-topology-vivobook/PKGBUILD`
+- Upstream: https://github.com/linux-msm/audioreach-topology @ `e7b20b2b16cdda18eb8ae143c8d95c4815c0288e`
+- Install: `cd packages/audioreach-topology-vivobook && makepkg -si` or `./scripts/install-audioreach-topology-vivobook.sh`
+- Output: `/usr/lib/firmware/qcom/x1e80100/ASUSTeK/vivobook-s15/X1E80100-ASUS-Vivobook-S15-tplg.bin`
+- Docs: `docs/AUDIOREACH-TOPOLOGY.md` (UCM/ADSP caveats, `CONFIG_RESET_GPIO`, verify steps)
+
 ## x1e-ec-tool (NEVER stop the service)
 - Local checkout: `~/src/x1e-ec-tool/` HEAD `ce572b3b9ab3aa8e116dbc286e52759c331842a5` (icecream95 upstream)
 - Install path: run `install.sh` from that tree → installs to `/usr/local` (`/usr/local/bin/x1e-ec-tool`, systemd unit under `/usr/local/lib/systemd/system/x1e-ec-tool.service`)

@@ -8,6 +8,12 @@
 # Local clone dir used by install-all.sh (optional)
 repos/
 
+# Arch package build artifacts (packages/audioreach-topology-vivobook)
+packages/*/pkg/
+packages/*/src/
+packages/*/*.pkg.tar.*
+packages/*/*.pkg.tar.zst
+
 # Editor / OS
 *~
 .DS_Store
