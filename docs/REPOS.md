@@ -52,6 +52,27 @@ git clone https://github.com/HurlyDesousa/linux-aarch64-vivobook.git
 
 ---
 
+### AudioReach topology (local package — **HOLD** from `install-all.sh`)
+
+**Purpose:** Build and install `X1E80100-ASUS-Vivobook-S15-tplg.bin` from [linux-msm/audioreach-topology](https://github.com/linux-msm/audioreach-topology) at package time (no blobs in git).
+
+| Item | Location |
+|------|----------|
+| PKGBUILD | `packages/audioreach-topology-vivobook/PKGBUILD` |
+| Docs | [docs/AUDIOREACH-TOPOLOGY.md](AUDIOREACH-TOPOLOGY.md) |
+| Wrapper | `scripts/install-audioreach-topology-vivobook.sh` |
+
+**Install (manual / when greenlit):**
+
+```bash
+cd packages/audioreach-topology-vivobook && makepkg -si
+# or: ./scripts/install-audioreach-topology-vivobook.sh
+```
+
+Pinned upstream: `e7b20b2b16cdda18eb8ae143c8d95c4815c0288e`. See docs for ADSP/PAS and UCM follow-on caveats.
+
+---
+
 ## External (referenced, not cloned by default)
 
 ### [x1e-ec-tool](https://github.com/artem-senatorov/x1e-ec-tool)
