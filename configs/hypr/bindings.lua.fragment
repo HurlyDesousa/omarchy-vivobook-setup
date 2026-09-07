@@ -1,0 +1,13 @@
+-- sw.art.youtube-chromium begin
+-- SUPER+SHIFT+Y: YouTube as Chromium --app (not xdg default webapp browser).
+do
+  local launcher = (os.getenv("HOME") or "/home/hurly") .. "/.local/bin/omarchy-launch-chromium-webapp"
+  local cmd = launcher .. " https://youtube.com/"
+  if o.rebind then
+    o.rebind("SUPER + SHIFT + Y", "YouTube", cmd)
+  else
+    hl.unbind("SUPER + SHIFT + Y")
+    o.bind("SUPER + SHIFT + Y", "YouTube", cmd)
+  end
+end
+-- sw.art.youtube-chromium end
