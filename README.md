@@ -111,7 +111,10 @@ configs/
 docs/
   SECRETS.md              # re-auth checklist (no secrets in repo)
   GGUF.md                 # model download docs
+  ALSA-UCM-VIVOBOOK.md    # UCM T14s profile / check / overlay (HOLD)
   REPOS.md                # related repo pointers
+packages/
+  alsa-ucm-vivobook-overlay/    # optional UCM conf overlay (HOLD)
 ```
 
 ## Inventory merge (TODO)

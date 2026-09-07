@@ -52,6 +52,22 @@ git clone https://github.com/HurlyDesousa/linux-aarch64-vivobook.git
 
 ---
 
+### ALSA UCM overlay (local package — **HOLD** from `install-all.sh`)
+
+**Purpose:** Ensure `ucm2/Qualcomm/x1e80100/` has Vivobook S15 DMI regex (`e055d16`+) and T14s-HiFi profile chain when distro `alsa-ucm-conf` is too old.
+
+| Item | Location |
+|------|----------|
+| Docs | [docs/ALSA-UCM-VIVOBOOK.md](ALSA-UCM-VIVOBOOK.md) |
+| Check (read-only) | `scripts/check-alsa-ucm-vivobook.sh` |
+| Overlay PKGBUILD | `packages/alsa-ucm-vivobook-overlay/PKGBUILD` |
+
+**Install (manual / when check fails):** `cd packages/alsa-ucm-vivobook-overlay && makepkg -si`
+
+Pinned overlay source: alsa-ucm-conf `00175aa645c482111d096c3d8230f182a875d286`. UCM is useless until `aplay` lists a real card (ADSP). AudioReach tplg firmware is a separate HOLD package (PR #26).
+
+---
+
 ## External (referenced, not cloned by default)
 
 ### [x1e-ec-tool](https://github.com/artem-senatorov/x1e-ec-tool)
