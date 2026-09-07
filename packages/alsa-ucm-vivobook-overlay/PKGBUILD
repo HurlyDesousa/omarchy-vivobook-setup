@@ -1,0 +1,35 @@
+# Overlay x1e80100 UCM confs for ASUS Vivobook S15 when distro alsa-ucm-conf is too old.
+# Vendors only the Vivobook→T14s profile chain from alsa-ucm-conf git tip — no blobs in git.
+pkgname=alsa-ucm-vivobook-overlay
+pkgver=20250907
+pkgrel=1
+pkgdesc="alsa-ucm-conf x1e80100 overlay for ASUS Vivobook S15 (T14s-HiFi DMI match)"
+arch=('any')
+url="https://github.com/alsa-project/alsa-ucm-conf"
+license=('BSD-3-Clause')
+depends=('alsa-ucm-conf')
+makedepends=('git')
+source=("git+https://github.com/alsa-project/alsa-ucm-conf.git?signed#commit=00175aa645c482111d096c3d8230f182a875d286")
+sha256sums=('SKIP')
+
+_ucm_relpath='ucm2/Qualcomm/x1e80100'
+_install_root='usr/share/alsa/ucm2/Qualcomm/x1e80100'
+
+# Vivobook S15 matches If.LENOVOT14s → LENOVO-T14s.conf → T14s-HiFi.conf (e055d16+).
+_overlay_files=(
+  'x1e80100.conf'
+  'LENOVO-T14s.conf'
+  'T14s-HiFi.conf'
+)
+
+pkgver() {
+  cd "${srcdir}/alsa-ucm-conf"
+  printf '%s.%s' "$(date -d "@$(git log -1 --format=%ct)" +%Y%m%d)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+  cd "${srcdir}/alsa-ucm-conf"
+  for f in "${_overlay_files[@]}"; do
+    install -Dm644 "${_ucm_relpath}/${f}" "${pkgdir}/${_install_root}/${f}"
+  done
+}

@@ -39,6 +39,12 @@ Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sourc
 - Omarchy wrapper unit: `configs/bin/omarchy-llama-server` + `configs/systemd/user/omarchy-llama-server.service`
 - **GGUF excluded** — use `scripts/fetch-gguf.sh` / `docs/GGUF.md`; live model was `~/.local/share/llm/Qwen2.5-3B-Instruct-Q4_K_M.gguf`
 
+## ALSA UCM (HOLD — not in install-all.sh)
+- Check: `./scripts/check-alsa-ucm-vivobook.sh` (read-only)
+- Docs: `docs/ALSA-UCM-VIVOBOOK.md` (T14s-HiFi via x1e80100 DMI regex; Vivobook regex `e055d16`+)
+- Overlay (if check fails): `packages/alsa-ucm-vivobook-overlay/` @ alsa-ucm-conf tip `00175aa645c482111d096c3d8230f182a875d286`
+- UCM useless until `aplay` lists a real card (ADSP/PAS still lite on live machine)
+
 ## x1e-ec-tool (NEVER stop the service)
 - Local checkout: `~/src/x1e-ec-tool/` HEAD `ce572b3b9ab3aa8e116dbc286e52759c331842a5` (icecream95 upstream)
 - Install path: run `install.sh` from that tree → installs to `/usr/local` (`/usr/local/bin/x1e-ec-tool`, systemd unit under `/usr/local/lib/systemd/system/x1e-ec-tool.service`)
