@@ -1,5 +1,9 @@
 [Unit]
 Description=Watch Vivobook power mode for GPU pin
+# Path units are Before=paths.target (basic.target). After=multi-user.target
+# creates an ordering cycle; systemd then deletes a random job to break it,
+# which has dropped NetworkManager.service on some boots.
+RequiresMountsFor=/home/hurly/.local/state/omarchy/powerprofiles
 
 [Path]
 PathChanged=/home/hurly/.local/state/omarchy/powerprofiles/vivobook-mode
