@@ -5,7 +5,7 @@
   "version": "1.1.0",
   "author": "Toby Swart",
   "license": "MIT",
-  "description": "Login autostart list: apps and the workspace they open on",
+  "description": "Login autostart list: apps, Hypr window class (including Brave PWA classes), and workspace",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Autostart",
-    "description": "Choose apps that start at login and which workspace they use",
+    "description": "Choose apps that start at login; Brave PWAs match site-specific window classes",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"
