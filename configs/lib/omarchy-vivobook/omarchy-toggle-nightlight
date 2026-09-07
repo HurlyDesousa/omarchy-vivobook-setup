@@ -11,8 +11,20 @@ if [[ ! -x "${AUTO}" ]]; then
   exit 1
 fi
 
+kelvin_from_hyprctl() {
+  local out
+  out="$(hyprctl hyprsunset temperature 2>/dev/null || true)"
+  out="${out%%$'\n'*}"
+  out="${out#"${out%%[![:space:]]*}"}"
+  out="${out%"${out##*[![:space:]]}"}"
+  [[ "${out}" == *[Kk] ]] && out="${out%[Kk]}"
+  if [[ "${out}" =~ ^[0-9]+$ ]] && (( out >= 1000 && out <= 20000 )); then
+    printf '%s\n' "${out}"
+  fi
+}
+
 if [[ ${1:-} == "--status" ]]; then
-  TEMP="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' | head -n1 || true)"
+  TEMP="$(kelvin_from_hyprctl)"
   if [[ -n "${TEMP}" && "${TEMP}" -lt 6000 ]]; then
     enabled=true
   else
@@ -23,7 +35,7 @@ if [[ ${1:-} == "--status" ]]; then
   exit 0
 fi
 
-CURRENT="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' | head -n1 || true)"
+CURRENT="$(kelvin_from_hyprctl)"
 if [[ -n "${CURRENT}" && "${CURRENT}" -lt 6000 ]]; then
   "${AUTO}" now-off
 else
