@@ -53,6 +53,7 @@ Item {
   }
 
   function forcePasswordFocus() {
+    if (!inputEnabled) return
     passwordInput.forceActiveFocus()
   }
 
@@ -70,6 +71,7 @@ Item {
   onPasswordTextChanged: syncPasswordText()
   onInputEnabledChanged: {
     if (inputEnabled) Qt.callLater(forcePasswordFocus)
+    else passwordInput.focus = false
   }
   Component.onCompleted: {
     syncPasswordText()
@@ -175,6 +177,7 @@ Item {
         }
 
         Keys.onPressed: function(event) {
+          if (!root.inputEnabled) return
           root.wakeRequested()
           if (event.key === Qt.Key_Escape || (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_U)) {
             root.passwordTextEdited("")

@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell.Io
 import qs.Commons
 
-Item {
+FocusScope {
   id: root
 
   property string logoPath: ""
@@ -19,25 +19,45 @@ Item {
     root.dismissed()
   }
 
-  onVisibleChanged: {
-    if (!visible) {
-      inputArmed = false
-      return
-    }
+  function grabInput() {
+    keySink.forceActiveFocus()
+  }
+
+  function startArm() {
     originX = -1
     originY = -1
     inputArmed = false
     inputArmTimer.restart()
-    Qt.callLater(function() { root.forceActiveFocus() })
+    grabInput()
   }
 
+  focus: visible
+  z: 10
+
+  // Created already visible when idle locks: onVisibleChanged does not fire.
+  Component.onCompleted: if (visible) startArm()
+
+  onVisibleChanged: {
+    if (!visible) {
+      inputArmed = false
+      inputArmTimer.stop()
+      return
+    }
+    startArm()
+  }
+
+  // Ignore leftover repeats from the idle event, then any key dismisses.
   Timer {
     id: inputArmTimer
-    interval: 1800
+    interval: 250
     repeat: false
-    onTriggered: root.inputArmed = true
+    onTriggered: {
+      root.inputArmed = true
+      root.grabInput()
+    }
   }
 
+  Keys.priority: Keys.BeforeItem
   Keys.onPressed: function(event) {
     event.accepted = true
     if (root.inputArmed) root.dismiss()
@@ -116,9 +136,12 @@ Item {
   }
 
   MouseArea {
+    id: grab
     anchors.fill: parent
+    z: 21
     hoverEnabled: true
     acceptedButtons: Qt.AllButtons
+    focus: false
     onPressed: if (root.inputArmed) root.dismiss()
     onPositionChanged: function(mouse) {
       if (!root.inputArmed) return
@@ -135,12 +158,38 @@ Item {
     }
   }
 
+  // Session-lock surfaces often have no focused item. An invisible field is
+  // the reliable way to receive keys on this compositor.
+  TextInput {
+    id: keySink
+    anchors.fill: parent
+    z: 20
+    opacity: 0
+    color: "transparent"
+    cursorVisible: false
+    clip: true
+    enabled: root.visible
+    activeFocusOnPress: true
+    inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
+    echoMode: TextInput.NoEcho
+    onTextChanged: {
+      if (text.length === 0) return
+      text = ""
+      if (root.inputArmed) root.dismiss()
+    }
+    Keys.priority: Keys.BeforeItem
+    Keys.onPressed: function(event) {
+      event.accepted = true
+      if (root.inputArmed) root.dismiss()
+    }
+  }
+
   Timer {
-    interval: 40
+    interval: 120
     running: root.visible
     repeat: true
     onTriggered: {
-      root.hue = (root.hue + 3) % 360
+      root.hue = (root.hue + 6) % 360
       canvas.requestPaint()
     }
   }

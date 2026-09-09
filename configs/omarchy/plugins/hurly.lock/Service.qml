@@ -38,6 +38,13 @@ Item {
   readonly property bool locked: lockRequested || sessionLock.locked || sessionLock.secure
   readonly property bool authenticating: authenticatingPassword || fingerprintAuthenticating
 
+  // Declared before recoverStrandedLock so a hot-reload cannot throw
+  // ReferenceError and leave Hyprland's session lock stranded.
+  Process {
+    id: clearCrashedLockProc
+    command: ["bash", "-lc", "hyprctl eval 'hl.config({ misc = { allow_session_lock_restore = true } })' >/dev/null"]
+  }
+
   function realScreenCount() {
     var screens = Quickshell.screens || []
     var count = 0
@@ -93,15 +100,22 @@ Item {
     strandedLockCheckProc.running = true
   }
 
+  function startCrashedLockRestore() {
+    try {
+      if (!clearCrashedLockProc.running) clearCrashedLockProc.running = true
+      return true
+    } catch (e) {
+      logEvent("lock-stranded: restore-unavailable")
+      return false
+    }
+  }
+
   function recoverStrandedLock() {
     if (!strandedLock || locked || !passwordPamConfigured) return
+    if (!startCrashedLockRestore()) return
 
     strandedLock = false
     logEvent("lock-stranded: recovering")
-    // Hyprland may still be showing the Oopsie failsafe from a dead lock
-    // client. Clear it, then wait for outputs to settle before beginLock
-    // so WlSessionLockSurface is not shown without an active lock.
-    if (!clearCrashedLockProc.running) clearCrashedLockProc.running = true
     if (!strandedRecoverDelay.running) strandedRecoverDelay.start()
   }
 
@@ -138,6 +152,7 @@ Item {
     }
 
     resetAuthenticationState()
+    if (strandedLock) startCrashedLockRestore()
     lockRequested = true
     screensaverCovering = withScreensaver === true
     if (root.screensaverCovering) idleBlankTimer.stop()
@@ -160,7 +175,6 @@ Item {
     armBlankTimer()
     runWake()
     if (sessionLock.secure) root.startFingerprint()
-    Qt.callLater(function() { if (lockView) lockView.forcePasswordFocus() })
   }
 
   function finishUnlock() {
@@ -286,31 +300,80 @@ Item {
       id: lockSurface
       color: root.screensaverCovering ? "#000000" : Color.background
 
-      LockView {
-        id: lockView
-        anchors.fill: parent
-        backgroundPath: root.backgroundPath
-        backgroundVersion: root.backgroundVersion
-        fingerprintConfigured: root.fingerprintConfigured
-        authenticatingPassword: root.authenticatingPassword
-        failureMessage: root.failureMessage
-        failedAttempts: root.failedAttempts
-        inputEnabled: root.lockRequested && !root.screensaverCovering
-        loadBackground: (sessionLock.locked || sessionLock.secure) && !root.screensaverCovering
-        passwordText: root.enteredPassword
-        onPasswordTextEdited: function(password) { root.enteredPassword = password }
-        onSubmitPassword: function(password) { root.submitPassword(password) }
-        onClearFailureRequested: root.failureMessage = ""
-        onWakeRequested: root.runWake()
+      // IDs in this surface are not visible to Service root. Keep grab/keys
+      // in this component, and re-grab after the surface is actually mapped.
+      onVisibleChanged: {
+        if (!visible || !root.screensaverCovering) return
+        lockContent.forceActiveFocus()
+        screensaverOverlay.grabInput()
       }
 
-      ScreensaverOverlay {
-        anchors.fill: parent
-        visible: root.screensaverCovering
-        logoPath: root.home + "/.config/omarchy/branding/screensaver.txt"
-        onDismissed: root.dismissScreensaver()
+      Connections {
+        target: sessionLock
+        function onSecureStateChanged() {
+          if (!sessionLock.secure || !root.screensaverCovering) return
+          lockContent.forceActiveFocus()
+          screensaverOverlay.grabInput()
+        }
       }
 
+      Connections {
+        target: root
+        function onScreensaverCoveringChanged() {
+          if (!root.screensaverCovering) return
+          lockContent.forceActiveFocus()
+          screensaverOverlay.grabInput()
+        }
+      }
+
+      Timer {
+        interval: 80
+        repeat: true
+        running: root.screensaverCovering && lockSurface.visible
+        onTriggered: screensaverOverlay.grabInput()
+      }
+
+      FocusScope {
+        id: lockContent
+        anchors.fill: parent
+        focus: true
+        Keys.enabled: root.screensaverCovering
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: function(event) {
+          event.accepted = true
+          root.logEvent("screensaver-key armed=" + screensaverOverlay.inputArmed)
+          if (screensaverOverlay.inputArmed) root.dismissScreensaver()
+        }
+
+        LockView {
+          id: lockView
+          anchors.fill: parent
+          backgroundPath: root.backgroundPath
+          backgroundVersion: root.backgroundVersion
+          fingerprintConfigured: root.fingerprintConfigured
+          authenticatingPassword: root.authenticatingPassword
+          failureMessage: root.failureMessage
+          failedAttempts: root.failedAttempts
+          inputEnabled: root.lockRequested && !root.screensaverCovering
+          loadBackground: (sessionLock.locked || sessionLock.secure) && !root.screensaverCovering
+          passwordText: root.enteredPassword
+          onPasswordTextEdited: function(password) { root.enteredPassword = password }
+          onSubmitPassword: function(password) { root.submitPassword(password) }
+          onClearFailureRequested: root.failureMessage = ""
+          onWakeRequested: root.runWake()
+        }
+
+        ScreensaverOverlay {
+          id: screensaverOverlay
+          anchors.fill: parent
+          visible: root.screensaverCovering
+          logoPath: root.home + "/.config/omarchy/branding/screensaver.txt"
+          onDismissed: root.dismissScreensaver()
+          onInputArmedChanged: {
+            if (inputArmed) root.logEvent("screensaver-armed")
+          }
+        }
+      }
     }
   }
 
@@ -426,6 +489,16 @@ Item {
       // A lock taken while this was in flight is this shell's own.
       root.strandedLock = exitCode === 0 && !root.locked && !root.lockRequested
       root.recoverStrandedLock()
+    }
+  }
+
+  Timer {
+    id: strandedRecoverDelay
+    interval: 400
+    repeat: false
+    onTriggered: {
+      if (root.lockRequested || root.locked) return
+      root.beginLock(false)
     }
   }
 

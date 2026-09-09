@@ -1,11 +1,8 @@
 #!/bin/bash
 
-# User override of the packaged Omarchy screensaver. Colourful ttfx logo,
-# stock-style input so a key or focus change exits without polling Hyprland.
-
-screensaver_in_focus() {
-  hyprctl activewindow -j | jq -e '.class == "org.omarchy.screensaver"' >/dev/null 2>&1
-}
+# User override of packaged Omarchy screensaver. Same ttfx random-effect
+# animation as stock. A key or clickpad click exits. Do not poll hyprctl
+# for focus — that has aborted Hyprland on this machine.
 
 exit_screensaver() {
   (( screensaver_exiting )) && exit 0
@@ -43,35 +40,20 @@ wait_for_terminal_resize() {
 
 wait_for_terminal_resize
 
-armed_at=$SECONDS
-read -r rows cols < <(stty size)
-(( rows > 1 )) || rows=24
-(( cols > 1 )) || cols=80
-printf '\033[H\033[2J'
-
-run_ttfx() {
+while true; do
   ttfx -i "$logo" \
     --frame-rate 120 \
-    --canvas-width "$cols" \
-    --canvas-height "$rows" \
+    --canvas-width 0 \
+    --canvas-height 0 \
+    --reuse-canvas \
     --anchor-canvas c \
     --anchor-text c \
+    --random-effect \
     --no-eol \
-    --no-restore-cursor \
-    "$@" &
-}
+    --no-restore-cursor &
 
-# Keep the rainbow logo cycling until lock or a key / focus change.
-# ttfx colorshift defaults to 3 cycles, which lasts only a few seconds.
-while true; do
-  run_ttfx colorshift --cycles 1000 --gradient-frames 3
   while pgrep -t "${tty#/dev/}" -x ttfx >/dev/null; do
     if read -n1 -t 1; then
-      exit_screensaver
-    fi
-    # Launching on Hyprland briefly steals focus. Ignore that for a few
-    # seconds so the screensaver does not exit before it is actually shown.
-    if (( SECONDS - armed_at >= 3 )) && ! screensaver_in_focus; then
       exit_screensaver
     fi
   done

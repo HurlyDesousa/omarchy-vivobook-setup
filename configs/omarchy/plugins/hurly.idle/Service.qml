@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.UPower
 import Quickshell.Wayland
@@ -14,6 +15,7 @@ Item {
   readonly property string stayAwakeStateDir: home + "/.local/state/omarchy/indicators"
   readonly property string stayAwakeStatePath: stayAwakeStateDir + "/stay-awake"
   readonly property string idleWatchBin: home + "/.local/bin/omarchy-idle-watch"
+  readonly property string launchScreensaverBin: home + "/.local/bin/omarchy-launch-screensaver"
   readonly property int defaultScreensaverOnAcSeconds: 900
   readonly property int defaultScreensaverOnBatterySeconds: 300
   readonly property int defaultLockSeconds: 300
@@ -25,23 +27,56 @@ Item {
   readonly property int screensaverTimeoutSeconds: onBattery ? screensaverOnBatterySeconds : screensaverOnAcSeconds
   readonly property int lockTimeoutSeconds: secondsFromConfig(idleConfig.lock, defaultLockSeconds)
   readonly property int dimTimeoutSeconds: secondsFromConfig(idleConfig.dim, defaultDimSeconds)
-  readonly property int firstIdleTimeoutSeconds: Math.max(1, screensaverTimeoutSeconds)
+  readonly property int firstIdleTimeoutSeconds: visualFirstIdleTimeout()
   readonly property int dimDelaySeconds: dimTimeoutSeconds > 0 ? Math.max(0, dimTimeoutSeconds - firstIdleTimeoutSeconds) : -1
+  readonly property int screensaverDelaySeconds: screensaverTimeoutSeconds > 0 ? Math.max(0, screensaverTimeoutSeconds - firstIdleTimeoutSeconds) : 0
+  readonly property int lockDelaySeconds: Math.max(0, lockTimeoutSeconds - firstIdleTimeoutSeconds)
   readonly property bool idleEnabled: stayAwakeStateLoaded && !stayAwake
+  readonly property string screensaverClass: "org.omarchy.screensaver"
 
   property bool stayAwake: false
   property bool stayAwakeStateLoaded: false
   property bool hasPendingStayAwakePersist: false
   property bool pendingStayAwakePersist: false
+  property bool idledThisCycle: false
+  property bool screensaverStartedThisCycle: false
+  property bool pendingLock: false
+  property double cycleStartedMs: 0
   property bool dimmedThisCycle: false
-  property bool lockingThisCycle: false
   property string lastEvent: "starting"
   property string lastEventAt: ""
   property string watchLine: ""
   property double stillSinceMs: 0
+  property var screensaverWindows: ({})
+  property int screensaverWindowCount: 0
 
   function secondsFromConfig(value, fallback) {
     return IdleModel.secondsFromConfig(value, fallback)
+  }
+
+  // Lock is not in this min: a shorter lock timeout must not skip or kill the saver.
+  function visualFirstIdleTimeout() {
+    if (dimTimeoutSeconds > 0 && screensaverTimeoutSeconds > 0)
+      return Math.min(dimTimeoutSeconds, screensaverTimeoutSeconds)
+    if (screensaverTimeoutSeconds > 0) return screensaverTimeoutSeconds
+    if (dimTimeoutSeconds > 0) return dimTimeoutSeconds
+    return Math.max(1, lockTimeoutSeconds)
+  }
+
+  function screensaverBlocksLock() {
+    if (screensaverTimeoutSeconds <= 0) return false
+    if (screensaverTimer.running) return true
+    if (root.screensaverStartedThisCycle && (root.screensaverWindowCount > 0 || screensaverLaunchGraceTimer.running))
+      return true
+    if (root.idledThisCycle && !root.screensaverStartedThisCycle)
+      return true
+    return false
+  }
+
+  function lockDeadlinePassed() {
+    if (root.cycleStartedMs <= 0) return false
+    var idleMs = root.firstIdleTimeoutSeconds * 1000 + (Date.now() - root.cycleStartedMs)
+    return idleMs >= root.lockTimeoutSeconds * 1000
   }
 
   function nowIso() {
@@ -77,7 +112,14 @@ Item {
 
   function lockAlreadyUp() {
     var svc = lockService()
-    return !!(svc && (svc.locked || svc.lockRequested))
+    return !!(svc && (svc.locked || svc.lockRequested || svc.strandedLock))
+  }
+
+  function launchScreensaver() {
+    if (root.lockAlreadyUp()) return
+    root.screensaverStartedThisCycle = true
+    screensaverLaunchGraceTimer.restart()
+    runProcess(screensaverProcess, "screensaver", "omarchy-shell lock isLocked 2>/dev/null | grep -qx true || " + root.launchScreensaverBin)
   }
 
   function dimDisplay() {
@@ -88,36 +130,164 @@ Item {
   }
 
   function restoreDisplay(reason) {
+    dimTimer.stop()
     if (!root.dimmedThisCycle) return
     root.dimmedThisCycle = false
     logEvent("restore-dim", reason || "requested")
     runProcess(restoreProcess, "restore-dim", root.home + "/.local/bin/omarchy-idle-dim restore")
   }
 
-  function lockWithScreensaver(reason) {
-    if (!root.idleEnabled || root.lockAlreadyUp()) return
-    if (root.lockingThisCycle) return
-    root.lockingThisCycle = true
-    logEvent("lock-screensaver", reason || "idle")
+  function stopScreensaver() {
+    runProcess(screensaverKillProcess, "screensaver-stop", root.home + "/.local/bin/omarchy-screensaver-touchpad on >/dev/null 2>&1; pkill -x ttfx; pkill -f '[o]rg.omarchy.screensaver' || true")
+  }
+
+  function lockSystem(reason) {
+    if (screensaverBlocksLock()) {
+      root.pendingLock = true
+      logEvent("lock-deferred", reason || "screensaver")
+      return
+    }
+
+    logEvent("lock-system", reason || "requested")
+    screensaverTimer.stop()
+    lockTimer.stop()
     dimTimer.stop()
+    screensaverLaunchGraceTimer.stop()
+    idleWatch.running = false
+    root.idledThisCycle = false
+    root.screensaverStartedThisCycle = false
+    root.pendingLock = false
+    root.cycleStartedMs = 0
+    resetScreensaverWindows()
+    stopScreensaver()
+
+    if (root.lockAlreadyUp()) return
 
     var svc = lockService()
     if (svc && typeof svc.beginLock === "function") {
-      var ok = svc.beginLock(true)
+      var ok = svc.beginLock(false)
       if (!ok) {
-        root.lockingThisCycle = false
-        logEvent("lock-screensaver-failed", "beginLock")
+        logEvent("lock-failed", "beginLock")
+        restartIdleWatch()
       }
       return
     }
-    runProcess(lockProcess, "lock", "omarchy-shell lock lockIdle >/dev/null")
+    runProcess(lockProcess, "lock", "omarchy-shell lock lock >/dev/null")
   }
 
-  function noteUserActivity() {
+  function startIdleCycle() {
+    if (!root.idleEnabled || root.lockAlreadyUp()) return
+    if (root.idledThisCycle) {
+      logEvent("idle-cycle-already-running")
+      return
+    }
+
+    logEvent("idle-cycle-start", "dim=" + root.dimTimeoutSeconds + " screensaver=" + root.screensaverTimeoutSeconds + " lock=" + root.lockTimeoutSeconds)
+    root.idledThisCycle = true
+    root.screensaverStartedThisCycle = false
+    root.pendingLock = false
+    root.cycleStartedMs = Date.now()
+    idleWatch.running = false
+    resetScreensaverWindows()
+
+    if (root.dimTimeoutSeconds > 0) {
+      if (root.dimDelaySeconds === 0) dimDisplay()
+      else dimTimer.restart()
+    }
+
+    if (root.screensaverDelaySeconds === 0) launchScreensaver()
+    else screensaverTimer.restart()
+
+    if (root.lockDelaySeconds === 0) lockSystem("lock-timeout-immediate")
+    else lockTimer.restart()
+  }
+
+  function cancelIdleCycle(reason) {
+    logEvent("idle-cycle-cancel", reason || "requested")
+    screensaverTimer.stop()
+    lockTimer.stop()
+    dimTimer.stop()
+    screensaverLaunchGraceTimer.stop()
+
+    restoreDisplay(reason || "idle-cycle-cancel")
+    if (root.idledThisCycle) runProcess(wakeProcess, "wake", "omarchy-system-wake")
+    stopScreensaver()
+
+    root.idledThisCycle = false
+    root.screensaverStartedThisCycle = false
+    root.pendingLock = false
+    root.cycleStartedMs = 0
+    resetScreensaverWindows()
+    if (root.idleEnabled && !root.lockAlreadyUp()) restartIdleWatch()
+  }
+
+  function resetScreensaverWindows() {
+    root.screensaverWindows = ({})
+    root.screensaverWindowCount = 0
+  }
+
+  function setScreensaverWindow(address, visible) {
+    var next = IdleModel.screensaverWindowsAfter(root.screensaverWindows, address, visible)
+    root.screensaverWindows = next.windows
+    root.screensaverWindowCount = next.count
+  }
+
+  function handleScreensaverWindowOpened(address) {
+    setScreensaverWindow(address, true)
+    screensaverLaunchGraceTimer.stop()
+  }
+
+  function handleScreensaverWindowClosed(address) {
+    setScreensaverWindow(address, false)
+
+    if (!root.idleEnabled || !root.idledThisCycle || !root.screensaverStartedThisCycle) return
+    if (root.screensaverWindowCount > 0) return
+
+    if (root.pendingLock || root.lockDeadlinePassed()) {
+      root.pendingLock = false
+      root.lockSystem("screensaver-dismissed")
+      return
+    }
+    root.cancelIdleCycle("screensaver-dismissed")
+  }
+
+  function eventParts(event, count) {
+    return IdleModel.eventParts(event, count)
+  }
+
+  function handleHyprlandEvent(event) {
+    var name = String(event && event.name ? event.name : "")
+    if (name === "openwindow") {
+      var open = eventParts(event, 4)
+      if (String(open[2] || "") === root.screensaverClass) root.handleScreensaverWindowOpened(open[0])
+    } else if (name === "closewindow") {
+      var close = eventParts(event, 1)
+      var address = String(close[0] || "")
+      if (root.screensaverWindows[address]) root.handleScreensaverWindowClosed(address)
+    }
+  }
+
+  function handleActiveSignal() {
     root.stillSinceMs = Date.now()
-    if (root.lockAlreadyUp()) return
-    root.lockingThisCycle = false
-    restoreDisplay("activity")
+    if (!root.idledThisCycle) return
+
+    // Mapping the screensaver window can look like activity. Keep the lock
+    // timer running while the real ttfx window is up.
+    if (root.screensaverStartedThisCycle && (root.screensaverWindowCount > 0 || screensaverLaunchGraceTimer.running)) {
+      logEvent("idle-monitor-active", "screensaver cycle remains armed")
+      return
+    }
+
+    cancelIdleCycle("activity")
+  }
+
+  function handleIdleChanged() {
+    logEvent("idle-monitor", idleMonitor.isIdle ? "idle" : "active")
+    if (!idleMonitor.isIdle) restoreDisplay("activity")
+    if (!root.idleEnabled) return
+
+    if (idleMonitor.isIdle) startIdleCycle()
+    else handleActiveSignal()
   }
 
   function handleWatchLine(raw) {
@@ -131,44 +301,42 @@ Item {
     }
     if (line === "active") {
       logEvent("idle-watch", "active")
-      noteUserActivity()
+      handleActiveSignal()
       return
     }
     if (line === "idle") {
       logEvent("idle-watch", "idle")
-      lockWithScreensaver("idle-watch")
+      startIdleCycle()
     }
-  }
-
-  function handleIdleChanged() {
-    if (idleMonitor.isIdle) {
-      logEvent("idle-monitor", "idle")
-      lockWithScreensaver("idle-monitor")
-      return
-    }
-    logEvent("idle-monitor", "active")
-    noteUserActivity()
   }
 
   function restartIdleWatch() {
     idleWatch.running = false
     Qt.callLater(function() {
-      if (root.idleEnabled && !idleWatch.running) idleWatch.running = true
+      if (root.idleEnabled && !root.idledThisCycle && !root.lockAlreadyUp() && !idleWatch.running)
+        idleWatch.running = true
     })
   }
 
   function statusJson() {
     return JSON.stringify({
-      version: "1.6.0",
+      version: "1.8.0",
       enabled: root.idleEnabled,
       stayAwake: root.stayAwake,
       idle: idleMonitor.isIdle,
-      locking: root.lockingThisCycle,
+      inIdleCycle: root.idledThisCycle,
+      screensaverStarted: root.screensaverStartedThisCycle,
+      pendingLock: root.pendingLock,
       onBattery: root.onBattery,
       screensaver: root.screensaverTimeoutSeconds,
       firstIdle: root.firstIdleTimeoutSeconds,
       screensaverOnAc: root.screensaverOnAcSeconds,
       screensaverOnBattery: root.screensaverOnBatterySeconds,
+      lock: root.lockTimeoutSeconds,
+      dim: root.dimTimeoutSeconds,
+      screensaverDelay: root.screensaverDelaySeconds,
+      lockDelay: root.lockDelaySeconds,
+      screensaverWindows: root.screensaverWindowCount,
       stillMs: root.stillSinceMs === 0 ? 0 : Math.round((Date.now() - root.stillSinceMs) / 1000),
       watch: idleWatch.running,
       watchLine: root.watchLine,
@@ -202,14 +370,8 @@ Item {
     root.stayAwakeStateLoaded = true
     if (!changed) return enabled ? "disabled" : "enabled"
     logEvent("stay-awake", (enabled ? "enabled" : "disabled") + (reason ? " " + reason : ""))
-    if (enabled) {
-      root.lockingThisCycle = false
-      idleWatch.running = false
-      restoreDisplay("stay-awake")
-    } else {
-      root.stillSinceMs = Date.now()
-      restartIdleWatch()
-    }
+    if (enabled) cancelIdleCycle("stay-awake")
+    else Qt.callLater(root.handleIdleChanged)
     return enabled ? "disabled" : "enabled"
   }
 
@@ -217,9 +379,9 @@ Item {
     return applyStayAwake(!value, true, "ipc")
   }
 
-  onFirstIdleTimeoutSecondsChanged: if (root.idleEnabled) restartIdleWatch()
+  onFirstIdleTimeoutSecondsChanged: if (root.idleEnabled && !root.idledThisCycle && !root.lockAlreadyUp()) restartIdleWatch()
   onIdleEnabledChanged: {
-    if (root.idleEnabled) restartIdleWatch()
+    if (root.idleEnabled && !root.idledThisCycle && !root.lockAlreadyUp()) restartIdleWatch()
     else idleWatch.running = false
   }
 
@@ -232,10 +394,40 @@ Item {
   }
 
   Timer {
+    id: screensaverTimer
+    interval: root.screensaverDelaySeconds * 1000
+    repeat: false
+    onTriggered: root.launchScreensaver()
+  }
+
+  Timer {
+    id: lockTimer
+    interval: root.lockDelaySeconds * 1000
+    repeat: false
+    onTriggered: if (root.idleEnabled && root.idledThisCycle) root.lockSystem("lock-timeout")
+  }
+
+  Timer {
     id: dimTimer
     interval: Math.max(0, root.dimDelaySeconds) * 1000
     repeat: false
-    onTriggered: if (root.idleEnabled) root.dimDisplay()
+    onTriggered: if (root.idleEnabled && root.idledThisCycle) root.dimDisplay()
+  }
+
+  Timer {
+    id: screensaverLaunchGraceTimer
+    interval: 3000
+    repeat: false
+    onTriggered: {
+      if (root.idleEnabled && root.idledThisCycle && root.screensaverStartedThisCycle && root.screensaverWindowCount === 0 && !idleMonitor.isIdle) {
+        root.cancelIdleCycle("screensaver-not-running")
+      }
+    }
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) { root.handleHyprlandEvent(event) }
   }
 
   Process {
@@ -249,14 +441,26 @@ Item {
     }
     onExited: function(exitCode, exitStatus) {
       root.logEvent("idle-watch-exit", "code=" + exitCode + " status=" + exitStatus)
-      if (root.idleEnabled)
-        Qt.callLater(function() { if (root.idleEnabled && !idleWatch.running) idleWatch.running = true })
+      if (root.idleEnabled && !root.idledThisCycle && !root.lockAlreadyUp())
+        Qt.callLater(function() { if (root.idleEnabled && !idleWatch.running && !root.idledThisCycle && !root.lockAlreadyUp()) idleWatch.running = true })
     }
   }
 
   Process {
+    id: screensaverProcess
+    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "screensaver exitCode=" + exitCode + " status=" + exitStatus) }
+  }
+  Process {
+    id: screensaverKillProcess
+    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "screensaver-stop exitCode=" + exitCode + " status=" + exitStatus) }
+  }
+  Process {
     id: lockProcess
     onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "lock exitCode=" + exitCode + " status=" + exitStatus) }
+  }
+  Process {
+    id: wakeProcess
+    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "wake exitCode=" + exitCode + " status=" + exitStatus) }
   }
   Process {
     id: dimProcess
@@ -299,7 +503,7 @@ Item {
 
   Component.onCompleted: {
     root.stillSinceMs = Date.now()
-    logEvent("service-ready", "1.6.0")
+    logEvent("service-ready", "1.8.0")
     refreshStayAwakeState()
   }
 
