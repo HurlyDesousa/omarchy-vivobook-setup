@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "sw.art.autostart",
+  "name": "Autostart",
+  "version": "1.2.0",
+  "author": "Toby Swart",
+  "license": "MIT",
+  "description": "Login autostart list, plus a default workspace per monitor",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Autostart",
+    "description": "Choose login apps and a default workspace per monitor",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

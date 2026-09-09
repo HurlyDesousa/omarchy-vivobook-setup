@@ -1,0 +1,870 @@
+#!/usr/bin/env python3
+"""Autostart apps for Omarchy/Hyprland: JSON list + generated toggle Lua."""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+
+CONFIG = Path.home() / ".config/omarchy/autostart-apps.json"
+LUA = Path.home() / ".local/state/omarchy/toggles/hypr/autostart-apps.lua"
+HYPR_AUTOSTART = Path.home() / ".config/hypr/autostart.lua"
+BEGIN = "-- sw.art.autostart begin"
+END = "-- sw.art.autostart end"
+
+EXEC_CODES = re.compile(r"\s*%[fFuUdDnNickvm]")
+
+
+def _atomic_write(path: Path, text: str, mode: int = 0o644) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.chmod(tmp, mode)
+    tmp.replace(path)
+
+
+DELAY_SECONDS_DEFAULT = 10
+LAPTOP_OUTPUT = re.compile(r"^(eDP|LVDS|DSI)-")
+DRM_CONNECTOR = re.compile(r"^card\d+-(.+)$")
+
+
+def is_enabled(data: dict | None) -> bool:
+    if not isinstance(data, dict) or "enabled" not in data:
+        return True
+    return bool(data.get("enabled"))
+
+
+def delay_seconds(data: dict | None) -> int:
+    if not isinstance(data, dict):
+        return DELAY_SECONDS_DEFAULT
+    try:
+        value = int(data.get("delay_seconds", DELAY_SECONDS_DEFAULT))
+    except (TypeError, ValueError):
+        value = DELAY_SECONDS_DEFAULT
+    return min(120, max(0, value))
+
+
+def is_laptop_output(name: str) -> bool:
+    return bool(LAPTOP_OUTPUT.match(str(name or "").strip()))
+
+
+def monitor_workspaces(data: dict | None) -> dict[str, int]:
+    raw = data.get("monitor_workspaces") if isinstance(data, dict) else None
+    items: list[tuple[object, object]] = []
+    if isinstance(raw, dict):
+        items = list(raw.items())
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                items.append((item.get("output") or item.get("name"), item.get("workspace")))
+    out: dict[str, int] = {}
+    seen_ws: set[int] = set()
+    for key, val in items:
+        name = str(key or "").strip()
+        try:
+            workspace = int(val)
+        except (TypeError, ValueError):
+            continue
+        if not name or workspace < 1 or workspace > 9 or workspace in seen_ws:
+            continue
+        seen_ws.add(workspace)
+        out[name] = workspace
+    return out
+
+
+def laptop_output_name(data: dict | None, names: list[str] | None = None) -> str:
+    configured = str((data or {}).get("laptop_output") or "").strip()
+    if configured:
+        return configured
+    for name in names or []:
+        if is_laptop_output(name):
+            return name
+    return "eDP-1"
+
+
+def hypr_monitors() -> list[dict]:
+    try:
+        raw = subprocess.check_output(
+            ["hyprctl", "monitors", "all", "-j"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        data = json.loads(raw)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, TypeError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def drm_connectors() -> list[dict]:
+    root = Path("/sys/class/drm")
+    out: list[dict] = []
+    if not root.is_dir():
+        return out
+    try:
+        entries = sorted(root.iterdir())
+    except OSError:
+        return out
+    for path in entries:
+        match = DRM_CONNECTOR.match(path.name)
+        if not match:
+            continue
+        name = match.group(1)
+        if not name or name.startswith("Writeback"):
+            continue
+        status = ""
+        try:
+            status = (path / "status").read_text(encoding="utf-8").strip()
+        except OSError:
+            pass
+        out.append({"name": name, "connected": status == "connected"})
+    return out
+
+
+def list_monitors(data: dict) -> list[dict]:
+    mapping = monitor_workspaces(data)
+    hypr_by_name: dict[str, dict] = {}
+    for monitor in hypr_monitors():
+        if not isinstance(monitor, dict):
+            continue
+        name = str(monitor.get("name") or "").strip()
+        if name:
+            hypr_by_name[name] = monitor
+    drm_by_name = {str(item["name"]): item for item in drm_connectors() if item.get("name")}
+    names: list[str] = []
+    seen: set[str] = set()
+    for source in (drm_by_name, hypr_by_name, mapping):
+        for name in source:
+            if name not in seen:
+                seen.add(name)
+                names.append(name)
+    laptop = laptop_output_name(data, names)
+    monitors = []
+    for name in names:
+        hypr = hypr_by_name.get(name) or {}
+        drm = drm_by_name.get(name) or {}
+        disabled = bool(hypr.get("disabled"))
+        width = 0
+        try:
+            width = int(hypr.get("width") or 0)
+        except (TypeError, ValueError):
+            width = 0
+        if name in hypr_by_name:
+            connected = not disabled and width > 0
+        else:
+            connected = bool(drm.get("connected"))
+        monitors.append(
+            {
+                "name": name,
+                "description": str(hypr.get("description") or "").strip(),
+                "connected": connected,
+                "laptop": name == laptop or is_laptop_output(name),
+                "workspace": mapping.get(name, 0),
+            }
+        )
+    monitors.sort(key=lambda item: (not item["laptop"], not item["connected"], item["name"]))
+    return monitors
+
+
+def public_payload(data: dict | None = None) -> dict:
+    payload = load_config() if data is None else data
+    monitors = list_monitors(payload)
+    names = [item["name"] for item in monitors]
+    return {
+        "enabled": is_enabled(payload),
+        "delay_seconds": delay_seconds(payload),
+        "apps": list(payload.get("apps") or []),
+        "laptop_output": laptop_output_name(payload, names),
+        "monitor_workspaces": monitor_workspaces(payload),
+        "monitors": monitors,
+    }
+
+
+def load_config() -> dict:
+    if not CONFIG.is_file():
+        return {"enabled": True, "apps": [], "laptop_output": "", "monitor_workspaces": {}}
+    try:
+        data = json.loads(CONFIG.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"enabled": True, "apps": [], "laptop_output": "", "monitor_workspaces": {}}
+    apps = data.get("apps") if isinstance(data, dict) else None
+    if not isinstance(apps, list):
+        apps = []
+    cleaned = []
+    for item in apps:
+        if not isinstance(item, dict):
+            continue
+        ident = str(item.get("id") or "").strip()
+        name = str(item.get("name") or ident).strip() or ident
+        exec_cmd = str(item.get("exec") or "").strip()
+        if not ident or not exec_cmd:
+            continue
+        try:
+            workspace = int(item.get("workspace") or 1)
+        except (TypeError, ValueError):
+            workspace = 1
+        workspace = min(9, max(1, workspace))
+        cleaned.append(
+            {
+                "id": ident,
+                "desktop": str(item.get("desktop") or f"{ident}.desktop"),
+                "name": name,
+                "exec": exec_cmd,
+                "class": usable_class(str(item.get("class") or "").strip(), exec_cmd, ident),
+                "workspace": workspace,
+            }
+        )
+    cfg = data if isinstance(data, dict) else {}
+    return {
+        "enabled": is_enabled(cfg),
+        "delay_seconds": delay_seconds(cfg),
+        "apps": cleaned,
+        "laptop_output": str(cfg.get("laptop_output") or "").strip(),
+        "monitor_workspaces": monitor_workspaces(cfg),
+    }
+
+
+def webapp_url_from_exec(exec_cmd: str) -> str:
+    try:
+        parts = shlex.split(exec_cmd)
+    except ValueError:
+        return ""
+    if len(parts) >= 2 and Path(parts[0]).name == "omarchy-launch-webapp":
+        return parts[1]
+    return ""
+
+
+def chromium_app_class_stem(url: str) -> str:
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    path = parsed.path or "/"
+    if not path.startswith("/"):
+        path = "/" + path
+    return host + "_" + path.replace("/", "_")
+
+
+def webapp_browser_prefixes() -> tuple[str, ...]:
+    prefixes = ["brave", "chrome"]
+    try:
+        browser = subprocess.check_output(
+            ["xdg-settings", "get", "default-web-browser"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        browser = ""
+    if browser.startswith("brave"):
+        prefixes = ["brave", "chrome"]
+    elif browser.startswith(("chromium", "google-chrome")):
+        prefixes = ["chrome", "brave"]
+    return tuple(prefixes)
+
+
+def webapp_window_classes(url: str) -> list[str]:
+    stem = chromium_app_class_stem(url)
+    if not stem:
+        return []
+    return [f"{prefix}-{stem}-Default" for prefix in webapp_browser_prefixes()]
+
+
+def usable_class(cls: str, exec_cmd: str, ident: str) -> str:
+    url = webapp_url_from_exec(exec_cmd)
+    if url:
+        classes = webapp_window_classes(url)
+        if classes:
+            return classes[0]
+    cls = (cls or "").strip()
+    if cls and not cls.startswith("@@") and cls != "omarchy-launch-webapp":
+        return cls
+    try:
+        return Path(shlex.split(exec_cmd)[0]).name
+    except (ValueError, IndexError):
+        return ident
+
+
+CLASS_ALIASES = {
+    "chromium": ["chromium", "Chromium", "chromium-browser"],
+    "Chromium": ["chromium", "Chromium", "chromium-browser"],
+    "chromium-browser": ["chromium", "Chromium", "chromium-browser"],
+    "brave-browser": ["brave-browser", "Brave-browser"],
+    "Brave-browser": ["brave-browser", "Brave-browser"],
+    "TelegramDesktop": ["org.telegram.desktop", "TelegramDesktop"],
+    "org.telegram.desktop": ["org.telegram.desktop", "TelegramDesktop"],
+    "thunderbird": ["org.mozilla.Thunderbird", "thunderbird", "Thunderbird"],
+    "Thunderbird": ["org.mozilla.Thunderbird", "thunderbird", "Thunderbird"],
+    "org.mozilla.Thunderbird": ["org.mozilla.Thunderbird", "thunderbird", "Thunderbird"],
+    "Cursor": ["cursor", "Cursor"],
+    "cursor": ["cursor", "Cursor"],
+    "firefox": ["firefox", "Firefox"],
+    "Firefox": ["firefox", "Firefox"],
+    "Opera": ["Opera", "opera"],
+    "opera": ["Opera", "opera"],
+}
+
+
+def window_classes_for_app(app: dict) -> list[str]:
+    url = webapp_url_from_exec(str(app.get("exec") or ""))
+    if url:
+        return webapp_window_classes(url)
+    cls = str(app.get("class") or "").strip()
+    if not cls or cls.startswith("@@"):
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for name in CLASS_ALIASES.get(cls, [cls]):
+        if name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
+def is_hosted_webapp(app: dict) -> bool:
+    exec_cmd = str(app.get("exec") or "")
+    ident = str(app.get("id") or "").lower()
+    return "omarchy-launch-webapp" in exec_cmd or "omarchy-launch-discord" in exec_cmd or ident == "discord"
+
+
+def launch_order(apps: list[dict]) -> list[dict]:
+    # Host browsers must start before --app windows that reuse the same process.
+    standalone = [app for app in apps if not is_hosted_webapp(app)]
+    hosted = [app for app in apps if is_hosted_webapp(app)]
+    return standalone + hosted
+
+
+CHROMIUM_PREF_PATHS = (
+    Path.home() / ".config/chromium/Default/Preferences",
+    Path.home() / ".config/BraveSoftware/Brave-Browser/Default/Preferences",
+    Path.home() / ".config/opera/Default/Preferences",
+    Path.home() / ".config/google-chrome/Default/Preferences",
+)
+
+FIREFOX_USER_JS = """\
+// Written by omarchy-autostart-apps. Restore previous windows and tabs at startup.
+user_pref("browser.startup.page", 3);
+user_pref("browser.sessionstore.resume_from_crash", true);
+"""
+
+
+def firefox_profile_dirs() -> list[Path]:
+    ini = Path.home() / ".mozilla/firefox/profiles.ini"
+    if not ini.is_file():
+        return []
+    profiles: list[Path] = []
+    current: dict[str, str] = {}
+    sections: list[dict[str, str]] = []
+    for raw in ini.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"):
+            if current:
+                sections.append(current)
+            current = {"_name": line[1:-1]}
+            continue
+        if "=" in line:
+            key, value = line.split("=", 1)
+            current[key.strip()] = value.strip()
+    if current:
+        sections.append(current)
+    root = Path.home() / ".mozilla/firefox"
+    for section in sections:
+        path = section.get("Path")
+        if not path:
+            continue
+        profile = Path(path) if section.get("IsRelative") == "0" else root / path
+        if profile.is_dir():
+            profiles.append(profile)
+    return profiles
+
+
+def patch_chromium_session_prefs(path: Path) -> None:
+    if not path.is_file():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict):
+        return
+    session = data.setdefault("session", {})
+    if not isinstance(session, dict):
+        session = {}
+        data["session"] = session
+    session["restore_on_startup"] = 1
+    profile = data.setdefault("profile", {})
+    if not isinstance(profile, dict):
+        profile = {}
+        data["profile"] = profile
+    profile["exited_cleanly"] = True
+    profile["exit_type"] = "Normal"
+    tmp = path.with_name(path.name + ".session-restore.tmp")
+    tmp.write_text(json.dumps(data, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+    os.chmod(tmp, 0o644)
+    tmp.replace(path)
+
+
+def write_firefox_session_restore() -> None:
+    for profile in firefox_profile_dirs():
+        _atomic_write(profile / "user.js", FIREFOX_USER_JS)
+
+
+def prepare_sessions() -> None:
+    write_firefox_session_restore()
+    for path in CHROMIUM_PREF_PATHS:
+        patch_chromium_session_prefs(path)
+
+
+def save_config(data: dict) -> None:
+    payload = {
+        "enabled": is_enabled(data),
+        "delay_seconds": delay_seconds(data),
+        "apps": list(data.get("apps") or []),
+        "monitor_workspaces": monitor_workspaces(data),
+    }
+    laptop = str(data.get("laptop_output") or "").strip()
+    if laptop:
+        payload["laptop_output"] = laptop
+    _atomic_write(CONFIG, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+    write_lua(payload)
+    write_hypr_autostart(payload)
+    reload_hypr()
+
+
+def lua_str(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def regex_class(value: str) -> str:
+    return "^" + re.escape(value) + "$"
+
+
+def window_rule_lines(apps: list[dict]) -> list[str]:
+    lines = []
+    seen: set[str] = set()
+    for app in apps:
+        ws = f"{app['workspace']} silent"
+        for cls in window_classes_for_app(app):
+            if cls in seen:
+                continue
+            seen.add(cls)
+            lines.append(
+                f"o.window({lua_str(regex_class(cls))}, {{ workspace = {lua_str(ws)} }})"
+            )
+    return lines
+
+
+def placer_lines(apps: list[dict]) -> list[str]:
+    mapping: dict[str, int] = {}
+    for app in apps:
+        try:
+            ws = int(app.get("workspace") or 1)
+        except (TypeError, ValueError):
+            ws = 1
+        for cls in window_classes_for_app(app):
+            mapping[cls] = ws
+    if not mapping:
+        return []
+    lines = [
+        "",
+        "-- Workspace rules are static and match initialClass. Chromium often maps",
+        "-- with an empty class on the focused workspace (1), then becomes chromium.",
+        "local sw_art_autostart_ws = {",
+    ]
+    for cls, ws in mapping.items():
+        lines.append(f"  [{lua_str(cls)}] = {lua_str(str(ws))},")
+    lines.extend(
+        [
+            "}",
+            "local function sw_art_autostart_place(w)",
+            "  if w == nil then return end",
+            "  local cls = w.class",
+            '  if cls == nil or cls == "" then cls = w.initial_class end',
+            '  if cls == nil or cls == "" then return end',
+            "  local dest = sw_art_autostart_ws[cls]",
+            "  if dest == nil then return end",
+            "  local cur = w.workspace and w.workspace.id",
+            "  if tostring(cur) == dest then return end",
+            "  hl.timer(function()",
+            "    hl.dispatch(hl.dsp.window.move({ workspace = dest, follow = false, window = w }))",
+            '  end, { timeout = 1, type = "oneshot" })',
+            "end",
+            'hl.on("window.open", sw_art_autostart_place)',
+            'hl.on("window.class", sw_art_autostart_place)',
+        ]
+    )
+    return lines
+
+
+def workspace_monitor_lines(data: dict) -> list[str]:
+    mapping = monitor_workspaces(data)
+    if not mapping:
+        return []
+    names = [item["name"] for item in list_monitors(data)]
+    laptop = laptop_output_name(data, names)
+    lines = [
+        "",
+        "-- Default workspace per monitor. Unplugged outputs fall back to the laptop.",
+    ]
+    for output, workspace in sorted(mapping.items(), key=lambda item: (item[1], item[0])):
+        lines.append(
+            "hl.workspace_rule({ "
+            f"workspace = {lua_str(str(workspace))}, "
+            f"monitor = {lua_str(output)}, "
+            "default = true })"
+        )
+    lines.extend(
+        [
+            f"local sw_art_laptop = {lua_str(laptop)}",
+            "local sw_art_ws_home = {",
+        ]
+    )
+    for output, workspace in sorted(mapping.items(), key=lambda item: (item[1], item[0])):
+        lines.append(f"  [{lua_str(str(workspace))}] = {lua_str(output)},")
+    lines.extend(
+        [
+            "}",
+            "local function sw_art_monitor_alive(name)",
+            "  if name == nil or name == \"\" then return false end",
+            "  local m = hl.get_monitor(name)",
+            "  if m == nil then return false end",
+            "  local w = m.width",
+            "  if w == nil or w == 0 then return false end",
+            "  return true",
+            "end",
+            "local function sw_art_laptop_output()",
+            "  if sw_art_monitor_alive(sw_art_laptop) then return sw_art_laptop end",
+            "  for _, m in ipairs(hl.get_monitors()) do",
+            "    local n = m.name",
+            "    if n and (n:match(\"^eDP%-\") or n:match(\"^LVDS%-\") or n:match(\"^DSI%-\")) and sw_art_monitor_alive(n) then",
+            "      return n",
+            "    end",
+            "  end",
+            "  local all = hl.get_monitors()",
+            "  if all and all[1] then return all[1].name end",
+            "  return sw_art_laptop",
+            "end",
+            "local function sw_art_home_workspaces()",
+            "  local laptop = sw_art_laptop_output()",
+            "  for ws, preferred in pairs(sw_art_ws_home) do",
+            "    local dest = preferred",
+            "    if not sw_art_monitor_alive(preferred) then dest = laptop end",
+            "    if dest ~= nil and dest ~= \"\" and sw_art_monitor_alive(dest) then",
+            "      hl.dispatch(hl.dsp.workspace.move({ workspace = ws, monitor = dest }))",
+            "    end",
+            "  end",
+            "end",
+            'hl.on("monitor.removed", function(_)',
+            "  hl.timer(function() sw_art_home_workspaces() end, { timeout = 80, type = \"oneshot\" })",
+            "end)",
+            'hl.on("monitor.added", function(_)',
+            "  hl.timer(function() sw_art_home_workspaces() end, { timeout = 150, type = \"oneshot\" })",
+            "end)",
+            'hl.on("monitor.layout_changed", function()',
+            "  hl.timer(function() sw_art_home_workspaces() end, { timeout = 80, type = \"oneshot\" })",
+            "end)",
+            "hl.timer(function() sw_art_home_workspaces() end, { timeout = 50, type = \"oneshot\" })",
+        ]
+    )
+    return lines
+
+
+def write_lua(data: dict) -> None:
+    # Keep a stub in the toggles dir so older copies cannot reintroduce nested hyprctl.
+    _atomic_write(
+        LUA,
+        "-- Generated by sw.art.autostart. App launches live in ~/.config/hypr/autostart.lua.\n",
+    )
+
+
+def write_hypr_autostart(data: dict) -> None:
+    apps = [a for a in data.get("apps") or [] if a.get("exec")]
+    block = [
+        BEGIN,
+        "-- Generated by omarchy-autostart-apps. Do not edit this block.",
+        "",
+    ]
+    if not is_enabled(data):
+        block.append("-- Autostart disabled.")
+    elif apps:
+        delay = delay_seconds(data)
+        block.append('hl.on("hyprland.start", function()')
+        indent = "  "
+        if delay > 0:
+            block.append(f"  -- Wait {delay}s so Wi-Fi/DNS are up before launching apps.")
+            block.append("  hl.timer(function()")
+            indent = "    "
+        block.append(
+            f'{indent}o.shell_succeeds(os.getenv("HOME") .. "/.local/bin/omarchy-autostart-apps prepare-sessions")'
+        )
+        for app in launch_order(apps):
+            ws = f"{app['workspace']} silent"
+            block.append(
+                f"{indent}hl.exec_cmd(o.launch({lua_str(app['exec'])}), {{ workspace = {lua_str(ws)} }})"
+            )
+        if delay > 0:
+            block.append(f"  end, {{ timeout = {delay * 1000}, type = \"oneshot\" }})")
+        block.append("end)")
+        block.append("")
+        block.extend(window_rule_lines(apps))
+        block.extend(placer_lines(apps))
+    else:
+        block.append("-- No autostart apps.")
+    block.extend(workspace_monitor_lines(data))
+    block.append(END)
+    block_text = "\n".join(block) + "\n"
+
+    if HYPR_AUTOSTART.is_file():
+        existing = HYPR_AUTOSTART.read_text(encoding="utf-8")
+    else:
+        existing = "-- Extra autostart processes.\n"
+
+    if BEGIN in existing and END in existing:
+        before, rest = existing.split(BEGIN, 1)
+        _, after = rest.split(END, 1)
+        new = before.rstrip() + "\n\n" + block_text
+        if after.strip():
+            new += after.lstrip("\n")
+        elif not new.endswith("\n"):
+            new += "\n"
+    else:
+        new = existing.rstrip() + "\n\n" + block_text
+
+    if not new.endswith("\n"):
+        new += "\n"
+    _atomic_write(HYPR_AUTOSTART, new)
+
+
+def reload_hypr() -> None:
+    subprocess.run(["hyprctl", "reload"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def desktop_dirs() -> list[Path]:
+    dirs: list[Path] = []
+    data_home = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))
+    dirs.append(Path(data_home) / "applications")
+    for part in os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":"):
+        part = part.strip()
+        if part:
+            dirs.append(Path(part) / "applications")
+    return dirs
+
+
+def parse_desktop(path: Path) -> dict | None:
+    section = None
+    fields: dict[str, str] = {}
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1]
+            continue
+        if section != "Desktop Entry" or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key in fields:
+            continue
+        fields[key] = value.strip()
+    if fields.get("Type", "Application") != "Application":
+        return None
+    if fields.get("NoDisplay", "").lower() == "true":
+        return None
+    if fields.get("Hidden", "").lower() == "true":
+        return None
+    ident = path.stem
+    name = fields.get("Name") or ident
+    exec_cmd = EXEC_CODES.sub("", fields.get("Exec") or "").strip()
+    if exec_cmd.startswith('"') and exec_cmd.endswith('"'):
+        exec_cmd = exec_cmd[1:-1]
+    exec_cmd = re.sub(r"\s+--$", "", exec_cmd).strip()
+    if not exec_cmd:
+        return None
+    wm_class = usable_class(
+        fields.get("StartupWMClass") or fields.get("WMClass") or "",
+        exec_cmd,
+        ident,
+    )
+    return {
+        "id": ident,
+        "desktop": path.name,
+        "name": name,
+        "exec": exec_cmd,
+        "class": wm_class,
+    }
+
+
+def catalog() -> list[dict]:
+    seen: set[str] = set()
+    apps: list[dict] = []
+    for directory in desktop_dirs():
+        if not directory.is_dir():
+            continue
+        try:
+            entries = sorted(directory.glob("*.desktop"))
+        except OSError:
+            continue
+        for path in entries:
+            if path.name in seen:
+                continue
+            parsed = parse_desktop(path)
+            if not parsed:
+                continue
+            seen.add(path.name)
+            apps.append(parsed)
+    apps.sort(key=lambda item: item["name"].lower())
+    return apps
+
+
+def id_aliases(token: str) -> set[str]:
+    token = str(token or "").strip()
+    names = {token}
+    if token.endswith(".desktop"):
+        names.add(token[: -len(".desktop")])
+    else:
+        names.add(token + ".desktop")
+    return {n for n in names if n}
+
+
+def app_matches(app: dict, token: str) -> bool:
+    names = id_aliases(token)
+    return app.get("id") in names or app.get("desktop") in names
+
+
+def add_app(desktop_id: str, workspace: int) -> None:
+    chosen = None
+    for app in catalog():
+        if app_matches(app, desktop_id):
+            chosen = app
+            break
+    if chosen is None:
+        raise SystemExit(f"unknown application: {desktop_id}")
+    data = load_config()
+    apps = [a for a in data["apps"] if a["id"] != chosen["id"]]
+    chosen["workspace"] = min(9, max(1, workspace))
+    apps.append(chosen)
+    apps.sort(key=lambda item: (item["workspace"], item["name"].lower()))
+    data["apps"] = apps
+    save_config(data)
+
+
+def remove_app(ident: str) -> None:
+    data = load_config()
+    data["apps"] = [a for a in data["apps"] if not app_matches(a, ident)]
+    save_config(data)
+
+
+def set_workspace(ident: str, workspace: int) -> None:
+    data = load_config()
+    found = False
+    for app in data["apps"]:
+        if app_matches(app, ident):
+            app["workspace"] = min(9, max(1, workspace))
+            found = True
+    if not found:
+        raise SystemExit(f"not in autostart: {ident}")
+    data["apps"].sort(key=lambda item: (item["workspace"], item["name"].lower()))
+    save_config(data)
+
+
+def set_enabled(value: bool) -> None:
+    data = load_config()
+    data["enabled"] = bool(value)
+    save_config(data)
+
+
+def set_monitor_workspace(output: str, workspace: int) -> None:
+    name = str(output or "").strip()
+    if not name:
+        raise SystemExit("missing monitor")
+    data = load_config()
+    mapping = monitor_workspaces(data)
+    if workspace <= 0:
+        mapping.pop(name, None)
+    else:
+        workspace = min(9, max(1, workspace))
+        mapping = {key: value for key, value in mapping.items() if value != workspace}
+        mapping[name] = workspace
+    data["monitor_workspaces"] = mapping
+    save_config(data)
+
+
+def dump(payload) -> None:
+    sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+def usage() -> None:
+    print(
+        "Usage: omarchy-autostart-apps list|catalog|add <id> [workspace]|remove <id>|workspace <id> <n>|monitor-workspace <output> <n>|enable|disable|toggle|apply|prepare-sessions",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in {"-h", "--help"}:
+        usage()
+    cmd = argv[0]
+    if cmd == "list":
+        dump(public_payload())
+        return 0
+    if cmd == "catalog":
+        dump({"apps": catalog()})
+        return 0
+    if cmd == "add":
+        if len(argv) < 2:
+            usage()
+        workspace = int(argv[2]) if len(argv) > 2 else 1
+        add_app(argv[1], workspace)
+        dump(public_payload())
+        return 0
+    if cmd == "remove":
+        if len(argv) < 2:
+            usage()
+        remove_app(argv[1])
+        dump(public_payload())
+        return 0
+    if cmd == "workspace":
+        if len(argv) < 3:
+            usage()
+        set_workspace(argv[1], int(argv[2]))
+        dump(public_payload())
+        return 0
+    if cmd in {"monitor-workspace", "monitor_workspace"}:
+        if len(argv) < 3:
+            usage()
+        set_monitor_workspace(argv[1], int(argv[2]))
+        dump(public_payload())
+        return 0
+    if cmd in {"enable", "on"}:
+        set_enabled(True)
+        dump(public_payload())
+        return 0
+    if cmd in {"disable", "off"}:
+        set_enabled(False)
+        dump(public_payload())
+        return 0
+    if cmd == "toggle":
+        data = load_config()
+        set_enabled(not is_enabled(data))
+        dump(public_payload())
+        return 0
+    if cmd == "apply":
+        save_config(load_config())
+        dump(public_payload())
+        return 0
+    if cmd == "prepare-sessions":
+        prepare_sessions()
+        return 0
+    usage()
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

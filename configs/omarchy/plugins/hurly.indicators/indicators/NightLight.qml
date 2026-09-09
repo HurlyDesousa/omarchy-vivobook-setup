@@ -67,8 +67,10 @@ BarIndicator {
     }
 
     onIsPrimaryChanged: {
-      if (root.isPrimary)
+      if (root.isPrimary) {
+        root.refreshAutoState()
         root.readHyprTemp()
+      }
     }
 
     function toggle() {
@@ -285,10 +287,10 @@ BarIndicator {
   }
 
   // Auto sunrise/sunset updates hyprsunset without notifying the service.
-  // One copy probes; the rest bind to the shared nightlight service.
+  // Probe auto mode once; keep polling only while auto is on.
   Timer {
-    interval: 5000
-    running: root.isPrimary
+    interval: 15000
+    running: root.isPrimary && root.autoEnabled
     repeat: true
     onTriggered: root.readHyprTemp()
   }
