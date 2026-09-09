@@ -1,0 +1,87 @@
+{
+  "enabled": true,
+  "delay_seconds": 10,
+  "apps": [
+    {
+      "id": "Discord",
+      "desktop": "Discord.desktop",
+      "name": "Discord",
+      "exec": "omarchy-launch-discord",
+      "class": "chrome-discord.com__channels_@me-Default",
+      "workspace": 1
+    },
+    {
+      "id": "org.telegram.desktop",
+      "desktop": "org.telegram.desktop.desktop",
+      "name": "Telegram",
+      "exec": "Telegram",
+      "class": "org.telegram.desktop",
+      "workspace": 1
+    },
+    {
+      "id": "WhatsApp",
+      "desktop": "WhatsApp.desktop",
+      "name": "WhatsApp",
+      "exec": "/home/hurly/.local/bin/omarchy-launch-webapp https://web.whatsapp.com/",
+      "class": "brave-web.whatsapp.com__-Default",
+      "workspace": 1
+    },
+    {
+      "id": "org.mozilla.Thunderbird",
+      "desktop": "org.mozilla.Thunderbird.desktop",
+      "name": "Thunderbird",
+      "exec": "thunderbird",
+      "class": "org.mozilla.Thunderbird",
+      "workspace": 2
+    },
+    {
+      "id": "brave-browser",
+      "desktop": "brave-browser.desktop",
+      "name": "Brave",
+      "exec": "brave",
+      "class": "brave-browser",
+      "workspace": 4
+    },
+    {
+      "id": "chromium",
+      "desktop": "chromium.desktop",
+      "name": "Chromium",
+      "exec": "/usr/bin/chromium",
+      "class": "chromium",
+      "workspace": 5
+    },
+    {
+      "id": "opera",
+      "desktop": "opera.desktop",
+      "name": "Opera",
+      "exec": "opera",
+      "class": "Opera",
+      "workspace": 6
+    },
+    {
+      "id": "firefox",
+      "desktop": "firefox.desktop",
+      "name": "Firefox",
+      "exec": "/usr/lib/firefox/firefox",
+      "class": "firefox",
+      "workspace": 7
+    },
+    {
+      "id": "cursor",
+      "desktop": "cursor.desktop",
+      "name": "Cursor",
+      "exec": "/home/hurly/.local/bin/cursor",
+      "class": "cursor",
+      "workspace": 8
+    },
+    {
+      "id": "TradingView",
+      "desktop": "TradingView.desktop",
+      "name": "TradingView",
+      "exec": "/home/hurly/.local/bin/omarchy-launch-webapp https://www.tradingview.com/chart/",
+      "class": "brave-www.tradingview.com__chart_-Default",
+      "workspace": 9
+    }
+  ],
+  "monitor_workspaces": {}
+}

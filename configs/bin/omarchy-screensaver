@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# User override of the packaged Omarchy screensaver. Colourful ttfx logo,
+# stock-style input so a key or focus change exits without polling Hyprland.
+
+screensaver_in_focus() {
+  hyprctl activewindow -j | jq -e '.class == "org.omarchy.screensaver"' >/dev/null 2>&1
+}
+
+exit_screensaver() {
+  (( screensaver_exiting )) && exit 0
+  screensaver_exiting=1
+  trap - SIGINT SIGTERM SIGHUP SIGQUIT
+  printf '\033[?1000l' 2>/dev/null || true
+  "${HOME}/.local/bin/omarchy-screensaver-touchpad" on >/dev/null 2>&1 || true
+  hyprctl eval 'hl.config({ cursor = { invisible = false } })' &>/dev/null || hyprctl keyword cursor:invisible false &>/dev/null || true
+  pkill -x ttfx 2>/dev/null
+  pkill -f '[o]rg.omarchy.screensaver' 2>/dev/null
+  exit 0
+}
+
+screensaver_exiting=0
+trap exit_screensaver SIGINT SIGTERM SIGHUP SIGQUIT
+
+printf '\033]11;rgb:00/00/00\007'
+
+hyprctl eval 'hl.config({ cursor = { invisible = true } })' &>/dev/null || hyprctl keyword cursor:invisible true &>/dev/null
+
+"${HOME}/.local/bin/omarchy-screensaver-touchpad" off >/dev/null 2>&1 || true
+# Click reporting only (not motion). A clickpad click dismisses; pad movement
+# is already disabled via the Hyprland touchpad device.
+printf '\033[?1000h'
+
+tty=$(tty 2>/dev/null)
+logo="${HOME}/.config/omarchy/branding/screensaver.txt"
+
+wait_for_terminal_resize() {
+  local deadline=$((SECONDS + 2))
+  while ((SECONDS < deadline)) && [[ $(stty size 2>/dev/null) == "24 80" ]]; do
+    sleep 0.02
+  done
+}
+
+wait_for_terminal_resize
+
+armed_at=$SECONDS
+read -r rows cols < <(stty size)
+(( rows > 1 )) || rows=24
+(( cols > 1 )) || cols=80
+printf '\033[H\033[2J'
+
+run_ttfx() {
+  ttfx -i "$logo" \
+    --frame-rate 120 \
+    --canvas-width "$cols" \
+    --canvas-height "$rows" \
+    --anchor-canvas c \
+    --anchor-text c \
+    --no-eol \
+    --no-restore-cursor \
+    "$@" &
+}
+
+# Keep the rainbow logo cycling until lock or a key / focus change.
+# ttfx colorshift defaults to 3 cycles, which lasts only a few seconds.
+while true; do
+  run_ttfx colorshift --cycles 1000 --gradient-frames 3
+  while pgrep -t "${tty#/dev/}" -x ttfx >/dev/null; do
+    if read -n1 -t 1; then
+      exit_screensaver
+    fi
+    # Launching on Hyprland briefly steals focus. Ignore that for a few
+    # seconds so the screensaver does not exit before it is actually shown.
+    if (( SECONDS - armed_at >= 3 )) && ! screensaver_in_focus; then
+      exit_screensaver
+    fi
+  done
+done
