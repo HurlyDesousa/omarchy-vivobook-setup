@@ -1,8 +1,12 @@
 #!/bin/bash
 
-# Disable the laptop touchpad while the screensaver is up, without an OSD
-# and without Omarchy's persistent touchpad-off toggle. The sibling clickpad
-# mouse device stays enabled so a click can still dismiss.
+# This PixArt pad exposes two Hyprland devices:
+#   hid-over-i2c-093a:3016-touchpad  (normal one-finger pointer)
+#   hid-over-i2c-093a:3016-mouse    (leftover HID collection)
+# Turning the touchpad off leaves only the mouse node, which needs two
+# fingers to move and three to click. Screensaver dismisses on a key or
+# click without disabling the pad, so `off` is a no-op and `on` only
+# restores if a leftover disable is still in effect.
 
 set -euo pipefail
 
@@ -12,34 +16,27 @@ HOLD_FILE="$STATE_DIR/touchpad-held-off"
 USER_DISABLED="$HOME/.local/state/omarchy/toggles/hypr/touchpad-disabled.lua"
 
 device="$(omarchy-hw-touchpad 2>/dev/null || true)"
-[[ -n $device ]] || exit 0
 
 set_enabled() {
   local name="$1" enabled="$2"
   hyprctl eval "hl.device({ name = \"$name\", enabled = $enabled })" >/dev/null
 }
 
+restore() {
+  rm -f "$HOLD_FILE"
+  if [[ -f $USER_DISABLED ]]; then
+    return 0
+  fi
+  [[ -n $device ]] || return 0
+  set_enabled "$device" true
+}
+
 case "$ACTION" in
 off)
-  if [[ -f $USER_DISABLED ]]; then
-    exit 0
-  fi
-  mkdir -p "$STATE_DIR"
-  set_enabled "$device" false
-  printf '%s\n' "$device" >"$HOLD_FILE"
+  exit 0
   ;;
 on)
-  if [[ -f $USER_DISABLED ]]; then
-    rm -f "$HOLD_FILE"
-    exit 0
-  fi
-  if [[ -f $HOLD_FILE ]]; then
-    name="$(cat "$HOLD_FILE")"
-    rm -f "$HOLD_FILE"
-    [[ -n $name ]] && set_enabled "$name" true
-  else
-    set_enabled "$device" true
-  fi
+  restore
   ;;
 *)
   echo "Usage: omarchy-screensaver-touchpad on|off" >&2

@@ -13,8 +13,6 @@ if omarchy-toggle-enabled screensaver-off && [[ $1 != "force" ]]; then
   exit 1
 fi
 
-"${HOME}/.local/bin/omarchy-screensaver-touchpad" off >/dev/null 2>&1 || true
-
 focused=$(omarchy-hyprland-monitor-focused)
 terminal=$(xdg-terminal-exec --print-id)
 
