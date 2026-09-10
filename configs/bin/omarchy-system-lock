@@ -1,0 +1,5 @@
+#!/bin/bash
+# Restore idle dim, then the packaged lock (which also kills ttfx).
+
+"${HOME}/.local/bin/omarchy-idle-dim" restore >/dev/null 2>&1 || true
+exec /usr/bin/omarchy-system-lock "$@"

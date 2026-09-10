@@ -43,6 +43,8 @@ Item {
   property bool pendingLock: false
   property double cycleStartedMs: 0
   property bool dimmedThisCycle: false
+  property bool restoreDimPending: false
+  property var boundLock: null
   property string lastEvent: "starting"
   property string lastEventAt: ""
   property string watchLine: ""
@@ -115,6 +117,10 @@ Item {
     return !!(svc && (svc.locked || svc.lockRequested || svc.strandedLock))
   }
 
+  function refreshLockBinding() {
+    root.boundLock = lockService()
+  }
+
   function launchScreensaver() {
     if (root.lockAlreadyUp()) return
     root.screensaverStartedThisCycle = true
@@ -131,14 +137,32 @@ Item {
 
   function restoreDisplay(reason) {
     dimTimer.stop()
-    if (!root.dimmedThisCycle) return
+    var shouldRestore = root.dimmedThisCycle
     root.dimmedThisCycle = false
+    if (!shouldRestore) return
     logEvent("restore-dim", reason || "requested")
-    runProcess(restoreProcess, "restore-dim", root.home + "/.local/bin/omarchy-idle-dim restore")
+    if (!runProcess(restoreProcess, "restore-dim", root.home + "/.local/bin/omarchy-idle-dim restore"))
+      root.restoreDimPending = true
   }
 
   function stopScreensaver() {
     runProcess(screensaverKillProcess, "screensaver-stop", root.home + "/.local/bin/omarchy-screensaver-touchpad on >/dev/null 2>&1; pkill -x ttfx; pkill -f '[o]rg.omarchy.screensaver' || true")
+  }
+
+  function abandonForLock(reason) {
+    logEvent("idle-abandon-for-lock", reason || "lock")
+    screensaverTimer.stop()
+    lockTimer.stop()
+    dimTimer.stop()
+    screensaverLaunchGraceTimer.stop()
+    idleWatch.running = false
+    restoreDisplay(reason || "lock")
+    stopScreensaver()
+    root.idledThisCycle = false
+    root.screensaverStartedThisCycle = false
+    root.pendingLock = false
+    root.cycleStartedMs = 0
+    resetScreensaverWindows()
   }
 
   function lockSystem(reason) {
@@ -154,12 +178,13 @@ Item {
     dimTimer.stop()
     screensaverLaunchGraceTimer.stop()
     idleWatch.running = false
+    restoreDisplay(reason || "lock")
+    stopScreensaver()
     root.idledThisCycle = false
     root.screensaverStartedThisCycle = false
     root.pendingLock = false
     root.cycleStartedMs = 0
     resetScreensaverWindows()
-    stopScreensaver()
 
     if (root.lockAlreadyUp()) return
 
@@ -243,6 +268,13 @@ Item {
     if (!root.idleEnabled || !root.idledThisCycle || !root.screensaverStartedThisCycle) return
     if (root.screensaverWindowCount > 0) return
 
+    restoreDisplay("screensaver-dismissed")
+
+    if (root.lockAlreadyUp()) {
+      root.abandonForLock("screensaver-closed-while-locked")
+      return
+    }
+
     if (root.pendingLock || root.lockDeadlinePassed()) {
       root.pendingLock = false
       root.lockSystem("screensaver-dismissed")
@@ -269,10 +301,11 @@ Item {
 
   function handleActiveSignal() {
     root.stillSinceMs = Date.now()
+    restoreDisplay("activity")
     if (!root.idledThisCycle) return
 
     // Mapping the screensaver window can look like activity. Keep the lock
-    // timer running while the real ttfx window is up.
+    // timer running while the real ttfx window is up, but still undim.
     if (root.screensaverStartedThisCycle && (root.screensaverWindowCount > 0 || screensaverLaunchGraceTimer.running)) {
       logEvent("idle-monitor-active", "screensaver cycle remains armed")
       return
@@ -320,7 +353,7 @@ Item {
 
   function statusJson() {
     return JSON.stringify({
-      version: "1.8.0",
+      version: "1.9.0",
       enabled: root.idleEnabled,
       stayAwake: root.stayAwake,
       idle: idleMonitor.isIdle,
@@ -464,11 +497,24 @@ Item {
   }
   Process {
     id: dimProcess
-    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "dim exitCode=" + exitCode + " status=" + exitStatus) }
+    onExited: function(exitCode, exitStatus) {
+      root.logEvent("process-exit", "dim exitCode=" + exitCode + " status=" + exitStatus)
+      if (!root.dimmedThisCycle) {
+        root.dimmedThisCycle = true
+        root.restoreDisplay("dim-finished-while-active")
+      }
+    }
   }
   Process {
     id: restoreProcess
-    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "restore-dim exitCode=" + exitCode + " status=" + exitStatus) }
+    onExited: function(exitCode, exitStatus) {
+      root.logEvent("process-exit", "restore-dim exitCode=" + exitCode + " status=" + exitStatus)
+      if (root.restoreDimPending) {
+        root.restoreDimPending = false
+        root.dimmedThisCycle = true
+        root.restoreDisplay("restore-retry")
+      }
+    }
   }
 
   Process {
@@ -501,10 +547,29 @@ Item {
     onFileChanged: root.refreshStayAwakeState()
   }
 
+  Timer {
+    id: lockBindTimer
+    interval: 1500
+    repeat: false
+    running: true
+    onTriggered: root.refreshLockBinding()
+  }
+
+  Connections {
+    target: root.boundLock
+    enabled: root.boundLock !== null
+    function onLockRequestedChanged() {
+      if (!root.boundLock) return
+      if (root.boundLock.lockRequested) root.abandonForLock("lock-requested")
+      else if (root.idleEnabled) root.restartIdleWatch()
+    }
+  }
+
   Component.onCompleted: {
     root.stillSinceMs = Date.now()
-    logEvent("service-ready", "1.8.0")
+    logEvent("service-ready", "1.9.0")
     refreshStayAwakeState()
+    Qt.callLater(root.refreshLockBinding)
   }
 
   IpcHandler {

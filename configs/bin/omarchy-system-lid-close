@@ -1,0 +1,13 @@
+#!/bin/bash
+# User override: drop the terminal screensaver and restore idle dim before
+# the stock lid-close lock. Closing the lid must wake to the login screen,
+# not ttfx.
+
+set -euo pipefail
+
+"${HOME}/.local/bin/omarchy-idle-dim" restore >/dev/null 2>&1 || true
+pkill -x ttfx 2>/dev/null || true
+timeout 1s pidwait -x ttfx 2>/dev/null || true
+pkill -f '[o]rg.omarchy.screensaver' 2>/dev/null || true
+
+exec /usr/bin/omarchy-system-lid-close "$@"

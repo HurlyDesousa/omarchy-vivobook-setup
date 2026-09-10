@@ -158,6 +158,7 @@ Item {
     if (root.screensaverCovering) idleBlankTimer.stop()
     else armBlankTimer()
     logEvent(root.screensaverCovering ? "lock-requested: screensaver" : "lock-requested")
+    if (!root.screensaverCovering) root.clearTerminalScreensaver()
     queueSessionLock()
 
     Qt.callLater(function() {
@@ -169,6 +170,7 @@ Item {
   }
 
   function dismissScreensaver() {
+    root.clearTerminalScreensaver()
     if (!root.screensaverCovering) return
     root.screensaverCovering = false
     logEvent("screensaver-dismissed")
@@ -190,6 +192,7 @@ Item {
     sessionLock.locked = false
     logEvent("unlocked")
     runWake()
+    if (!restoreDimProc.running) restoreDimProc.running = true
   }
 
   function armBlankTimer() {
@@ -204,6 +207,11 @@ Item {
 
   function runBlank() {
     if (!blankProcess.running) blankProcess.running = true
+  }
+
+  function clearTerminalScreensaver() {
+    if (killScreensaverProc.running) return
+    killScreensaverProc.running = true
   }
 
   function submitPassword(value) {
@@ -512,6 +520,16 @@ Item {
     command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
   }
 
+  Process {
+    id: killScreensaverProc
+    command: ["bash", "-lc", "pkill -x ttfx 2>/dev/null || true; timeout 1s pidwait -x ttfx 2>/dev/null || true; pkill -f '[o]rg.omarchy.screensaver' 2>/dev/null || true"]
+  }
+
+  Process {
+    id: restoreDimProc
+    command: ["bash", "-lc", "$HOME/.local/bin/omarchy-idle-dim restore >/dev/null 2>&1 || true"]
+  }
+
   Timer {
     id: idleBlankTimer
     interval: 5000
@@ -572,6 +590,7 @@ Item {
     target: Quickshell
     function onScreensChanged() {
       root.requestSessionLock()
+      if (root.lockRequested && !root.screensaverCovering) root.clearTerminalScreensaver()
 
       // A monitor still coming up has no workspace, so cannot answer yet.
       strandedLockRetryTimer.rearm()
@@ -616,6 +635,7 @@ Item {
 
     function lock(): string {
       if (!root.passwordPamConfigured) return "missing-pam"
+      root.clearTerminalScreensaver()
       if (root.locked || root.lockRequested) {
         root.dismissScreensaver()
         return "ok"

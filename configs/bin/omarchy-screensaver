@@ -23,9 +23,7 @@ printf '\033]11;rgb:00/00/00\007'
 
 hyprctl eval 'hl.config({ cursor = { invisible = true } })' &>/dev/null || hyprctl keyword cursor:invisible true &>/dev/null
 
-"${HOME}/.local/bin/omarchy-screensaver-touchpad" off >/dev/null 2>&1 || true
-# Click reporting only (not motion). A clickpad click dismisses; pad movement
-# is already disabled via the Hyprland touchpad device.
+# Click reporting only (not motion). A click dismisses; movement does not.
 printf '\033[?1000h'
 
 tty=$(tty 2>/dev/null)
