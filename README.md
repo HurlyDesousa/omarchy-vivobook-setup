@@ -61,6 +61,7 @@ Until the inventory merge, these are the documented targets. Placeholder configs
 ### Hyprland
 
 - `autostart.lua`: task-manager float rule + LIVE login autostart (Discord/Telegram/WhatsApp ws1, Thunderbird ws2, Brave ws4 … Cursor ws8, TradingView ws9); **10s Wi-Fi settle delay** (`delay_seconds: 10`). Web apps use site-specific `class` values; Hypr rules include Brave + Chrome fallbacks.
+- `bindings.lua`: `SUPER + SHIFT + Y` rebinds YouTube to Chromium `--app` (`configs/hypr/bindings.lua.fragment`). Stock Omarchy webapps follow the xdg default (LIVE: **Brave**).
 - See `configs/hypr/autostart.lua.fragment` and `configs/omarchy/autostart-apps.json`
 
 ### Omarchy shell (`shell.json`)
