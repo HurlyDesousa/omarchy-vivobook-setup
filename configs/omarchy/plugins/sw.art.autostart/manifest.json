@@ -3,7 +3,7 @@
   "id": "sw.art.autostart",
   "name": "Autostart",
   "version": "1.1.0",
-  "author": "Toby Swart",
+  "author": "Hurly",
   "license": "MIT",
   "description": "Login autostart list: apps, Hypr window class (including Brave PWA classes), and workspace",
   "kinds": [
