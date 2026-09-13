@@ -5,9 +5,8 @@ DEV=dp_aux_backlight
 DIM_PCT=25
 STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/omarchy-idle-dim.state"
 KBD_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/kbd-backlight"
-# root may call us; prefer hurly home for prefs
-if [[ ! -f $KBD_STATE && -f /home/hurly/.local/state/omarchy/kbd-backlight ]]; then
-  KBD_STATE=/home/hurly/.local/state/omarchy/kbd-backlight
+if [[ ! -f $KBD_STATE && -n "${OMARCHY_HOME:-}" && -f "${OMARCHY_HOME}/.local/state/omarchy/kbd-backlight" ]]; then
+  KBD_STATE="${OMARCHY_HOME}/.local/state/omarchy/kbd-backlight"
 fi
 
 cur() { brightnessctl -d "$DEV" get; }

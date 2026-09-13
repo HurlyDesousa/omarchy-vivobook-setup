@@ -31,7 +31,7 @@
 +    if (root.dimmedThisCycle) return
 +    if (root.dimTimeoutSeconds <= 0) return
 +    root.dimmedThisCycle = true
-+    runProcess(dimProcess, "dim", "/home/hurly/.local/bin/omarchy-idle-dim dim")
++    runProcess(dimProcess, "dim", "/usr/local/bin/omarchy-idle-dim dim")
 +  }
 +
 +  function restoreDisplay(reason) {
@@ -39,7 +39,7 @@
 +    if (!root.dimmedThisCycle) return
 +    root.dimmedThisCycle = false
 +    logEvent("restore-dim", reason || "requested")
-+    runProcess(restoreProcess, "restore-dim", "/home/hurly/.local/bin/omarchy-idle-dim restore")
++    runProcess(restoreProcess, "restore-dim", "/usr/local/bin/omarchy-idle-dim restore")
 +  }
 +
    function lockSystem(reason) {

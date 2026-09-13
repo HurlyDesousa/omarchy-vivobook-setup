@@ -1,13 +1,53 @@
 #!/bin/bash
 set -euo pipefail
-LIB=/home/hurly/.local/lib/omarchy-vivobook
+
+for _vb_lib in "${HOME}/.local/lib/omarchy-vivobook/user-home.sh" \
+               "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
+  [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
+    source "${_vb_lib}"; vivobook_ensure_user_home; break; }
+done
+
+SAFE_APPLY=""
+for candidate in \
+  "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/safe-apply.sh}" \
+  "${HOME}/src/omarchy-vivobook-setup/scripts/lib/safe-apply.sh"; do
+  [[ -n "${candidate}" && -f "${candidate}" ]] && { SAFE_APPLY="${candidate}"; break; }
+done
+[[ -n "${SAFE_APPLY}" ]] && { # shellcheck source=/dev/null
+  source "${SAFE_APPLY}"; }
+
+LIB="${HOME}/.local/lib/omarchy-vivobook"
 SHARE_BIN=/usr/share/omarchy/bin
-[[ -x "$LIB/omarchy-powerprofiles-list" && -x "$LIB/omarchy-powerprofiles-set" ]] || exit 0
-ln -sfn "$LIB/omarchy-powerprofiles-list" "$SHARE_BIN/omarchy-powerprofiles-list"
-ln -sfn "$LIB/omarchy-powerprofiles-set" "$SHARE_BIN/omarchy-powerprofiles-set"
-if [[ -x "$LIB/omarchy-battery-status" ]]; then
-  ln -sfn "$LIB/omarchy-battery-status" "$SHARE_BIN/omarchy-battery-status"
+[[ -x "${LIB}/omarchy-powerprofiles-list" && -x "${LIB}/omarchy-powerprofiles-set" ]] || exit 0
+
+if declare -F safe_overlay_symlink >/dev/null 2>&1; then
+  safe_overlay_symlink "${LIB}/omarchy-powerprofiles-list" "${SHARE_BIN}/omarchy-powerprofiles-list" \
+    "overlay omarchy-powerprofiles-list"
+  safe_overlay_symlink "${LIB}/omarchy-powerprofiles-set" "${SHARE_BIN}/omarchy-powerprofiles-set" \
+    "overlay omarchy-powerprofiles-set"
+  if [[ -x "${LIB}/omarchy-battery-status" ]]; then
+    safe_overlay_symlink "${LIB}/omarchy-battery-status" "${SHARE_BIN}/omarchy-battery-status" \
+      "overlay omarchy-battery-status"
+  fi
+else
+  for pair in \
+    "${LIB}/omarchy-powerprofiles-list:${SHARE_BIN}/omarchy-powerprofiles-list" \
+    "${LIB}/omarchy-powerprofiles-set:${SHARE_BIN}/omarchy-powerprofiles-set" \
+    "${LIB}/omarchy-battery-status:${SHARE_BIN}/omarchy-battery-status"; do
+    src="${pair%%:*}"
+    dest="${pair#*:}"
+    [[ -x "${src}" ]] || continue
+    if [[ -w "${SHARE_BIN}" ]]; then
+      ln -sfn "${src}" "${dest}"
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo ln -sfn "${src}" "${dest}"
+    else
+      echo "restore-vivobook-powerprofiles: cannot write ${dest} — run with sudo" >&2
+      exit 1
+    fi
+  done
 fi
+
 if [[ ! -f /etc/udev/rules.d/99-omarchy-vivobook-powerprofiles.rules ]]; then
   echo "missing udev rule — re-run Omarchy Master powerprofiles install" >&2
 fi

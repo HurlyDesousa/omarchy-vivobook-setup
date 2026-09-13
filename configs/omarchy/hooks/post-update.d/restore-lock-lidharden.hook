@@ -1,57 +1,63 @@
 #!/bin/bash
-# EXAMPLE / planned post-update hook: re-apply lock lid-harden QML after Omarchy updates.
-# Live pattern mirrors restore-idle-dim.hook — install as:
-#   ~/.config/omarchy/hooks/post-update.d/restore-lock-lidharden.hook
-# and chmod +x. Not enabled on live host yet (example only).
-#
-# Purpose: restore 1500ms stabilize + stranded recovery fix in
-#   /usr/share/omarchy/shell/plugins/lock/Service.qml
+# Omarchy post-update hook: re-apply lock lid-harden QML after Omarchy updates.
 # Source of truth patch: configs/quickshell/lock-lidharden.patch in omarchy-vivobook-setup
 set -euo pipefail
 
-for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
+for _vb_lib in "${HOME}/.local/lib/omarchy-vivobook/user-home.sh" \
                "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
   [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
     source "${_vb_lib}"; vivobook_ensure_user_home; break; }
 done
-[[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
 
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
 PATCH_CANDIDATES=(
-  "${OMARCHY_VIVOBOOK_SETUP:-}/configs/quickshell/lock-lidharden.patch"
-  "$HOME/.local/share/omarchy/lock-lidharden/lock-lidharden.patch"
+  "${REPO_ROOT}/configs/quickshell/lock-lidharden.patch"
+  "${HOME}/.local/share/omarchy/lock-lidharden/lock-lidharden.patch"
   "/usr/local/share/omarchy-vivobook-setup/configs/quickshell/lock-lidharden.patch"
 )
 TARGET="/usr/share/omarchy/shell/plugins/lock/Service.qml"
-BACKUP_DIR="$HOME/.local/share/omarchy/lock-lidharden"
-mkdir -p "$BACKUP_DIR"
+BACKUP_DIR="${HOME}/.local/share/omarchy/lock-lidharden"
+mkdir -p "${BACKUP_DIR}"
 
 PATCH=""
 for c in "${PATCH_CANDIDATES[@]}"; do
-  if [[ -n "$c" && -f "$c" ]]; then PATCH="$c"; break; fi
+  if [[ -n "${c}" && -f "${c}" ]]; then PATCH="${c}"; break; fi
 done
 
-if [[ -z "$PATCH" ]]; then
+if [[ -z "${PATCH}" ]]; then
   echo "restore-lock-lidharden: no patch found; skip" >&2
   exit 0
 fi
 
-if [[ ! -f "$TARGET" ]]; then
-  echo "restore-lock-lidharden: target missing: $TARGET" >&2
+if grep -q '^# Quickshell lock lid-harden patch (placeholder)' "${PATCH}" 2>/dev/null; then
+  echo "restore-lock-lidharden: patch is placeholder; skip" >&2
   exit 0
 fi
 
-if [[ ! -f "$BACKUP_DIR/Service.qml.stock" ]]; then
-  cp -a "$TARGET" "$BACKUP_DIR/Service.qml.stock"
+if [[ ! -f "${TARGET}" ]]; then
+  echo "restore-lock-lidharden: target missing: ${TARGET}" >&2
+  exit 0
 fi
 
-if patch -R -p0 --dry-run -d / < "$PATCH" >/dev/null 2>&1; then
+if [[ ! -f "${BACKUP_DIR}/Service.qml.stock" ]]; then
+  cp -a "${TARGET}" "${BACKUP_DIR}/Service.qml.stock"
+fi
+
+if patch -R -p1 --dry-run -d / < "${PATCH}" >/dev/null 2>&1; then
   echo "restore-lock-lidharden: already applied"
   exit 0
 fi
 
-if patch -N -p0 --dry-run -d / < "$PATCH" >/dev/null 2>&1; then
-  patch -N -p0 -d / < "$PATCH"
-  echo "restore-lock-lidharden: applied $PATCH"
+if patch -N -p1 --dry-run -d / < "${PATCH}" >/dev/null 2>&1; then
+  if [[ -w "${TARGET}" ]]; then
+    patch -N -p1 -d / < "${PATCH}"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo patch -N -p1 -d / < "${PATCH}"
+  else
+    echo "restore-lock-lidharden: cannot write ${TARGET} — run with sudo" >&2
+    exit 1
+  fi
+  echo "restore-lock-lidharden: applied ${PATCH}"
 else
   echo "restore-lock-lidharden: patch does not apply cleanly; manual review needed" >&2
   exit 1

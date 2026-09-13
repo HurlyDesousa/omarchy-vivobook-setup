@@ -1,6 +1,34 @@
 #!/bin/bash
 set -euo pipefail
-BIN=/home/hurly/.local/bin/omarchy-battery-status
+
+for _vb_lib in "${HOME}/.local/lib/omarchy-vivobook/user-home.sh" \
+               "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
+  [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
+    source "${_vb_lib}"; vivobook_ensure_user_home; break; }
+done
+
+SAFE_APPLY=""
+for candidate in \
+  "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/safe-apply.sh}" \
+  "${HOME}/src/omarchy-vivobook-setup/scripts/lib/safe-apply.sh"; do
+  [[ -n "${candidate}" && -f "${candidate}" ]] && { SAFE_APPLY="${candidate}"; break; }
+done
+[[ -n "${SAFE_APPLY}" ]] && { # shellcheck source=/dev/null
+  source "${SAFE_APPLY}"; }
+
+BIN="${HOME}/.local/bin/omarchy-battery-status"
 SHARE_BIN=/usr/share/omarchy/bin
-[[ -x "$BIN" ]] || exit 0
-ln -sfn "$BIN" "$SHARE_BIN/omarchy-battery-status"
+[[ -x "${BIN}" ]] || exit 0
+
+if declare -F safe_overlay_symlink >/dev/null 2>&1; then
+  safe_overlay_symlink "${BIN}" "${SHARE_BIN}/omarchy-battery-status" "overlay omarchy-battery-status"
+else
+  if [[ -w "${SHARE_BIN}" ]]; then
+    ln -sfn "${BIN}" "${SHARE_BIN}/omarchy-battery-status"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ln -sfn "${BIN}" "${SHARE_BIN}/omarchy-battery-status"
+  else
+    echo "restore-vivobook-battery-status: cannot write ${SHARE_BIN} — run with sudo" >&2
+    exit 1
+  fi
+fi

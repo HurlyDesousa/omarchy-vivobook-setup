@@ -1,13 +1,33 @@
 #!/bin/bash
 # Omarchy post-update hook: Vivobook login autostart (plugin + hypr block sync).
+# Safe apply: backup, dirty skip, --force, --dry-run.
 set -euo pipefail
 
-for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
+HOOK_FORCE=0
+HOOK_DRY_RUN=0
+for arg in "$@"; do
+  case "${arg}" in
+    --force) HOOK_FORCE=1 ;;
+    --dry-run) HOOK_DRY_RUN=1 ;;
+  esac
+done
+export INSTALL_FORCE="${HOOK_FORCE}"
+export INSTALL_DRY_RUN="${HOOK_DRY_RUN}"
+
+for _vb_lib in "${HOME}/.local/lib/omarchy-vivobook/user-home.sh" \
                "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
   [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
     source "${_vb_lib}"; vivobook_ensure_user_home; break; }
 done
-[[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
+
+SAFE_APPLY=""
+for candidate in \
+  "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/safe-apply.sh}" \
+  "${HOME}/src/omarchy-vivobook-setup/scripts/lib/safe-apply.sh"; do
+  [[ -n "${candidate}" && -f "${candidate}" ]] && { SAFE_APPLY="${candidate}"; break; }
+done
+[[ -n "${SAFE_APPLY}" ]] && { # shellcheck source=/dev/null
+  source "${SAFE_APPLY}"; }
 
 REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
 CONFIGS="${REPO_ROOT}/configs"
@@ -18,12 +38,21 @@ JSON_DEST="${HOME}/.config/omarchy/autostart-apps.json"
 HYPR_SRC="${CONFIGS}/hypr/autostart.lua.fragment"
 HYPR_DEST="${HOME}/.config/hypr/autostart.lua"
 
-install_file() {
+safe_install_file() {
   local src="$1"
   local dest="$2"
-  [[ -f "${src}" ]] || return 0
-  mkdir -p "$(dirname "${dest}")"
-  cp "${src}" "${dest}"
+  local label="$3"
+  if declare -F safe_apply_file >/dev/null 2>&1; then
+    safe_apply_file "${src}" "${dest}" "${label}"
+  else
+    [[ -f "${src}" ]] || return 0
+    mkdir -p "$(dirname "${dest}")"
+    if [[ -f "${dest}" ]] && ! cmp -s "${src}" "${dest}" && [[ "${INSTALL_FORCE}" != "1" ]]; then
+      echo "restore-vivobook-autostart: skipping dirty ${dest} (use --force)" >&2
+      return 0
+    fi
+    cp "${src}" "${dest}"
+  fi
 }
 
 install_plugin() {
@@ -31,15 +60,25 @@ install_plugin() {
   mkdir -p "${PLUGIN_DEST}"
   for f in manifest.json BarWidget.qml Panel.qml; do
     [[ -f "${PLUGIN_SRC}/${f}" ]] || continue
-    cp "${PLUGIN_SRC}/${f}" "${PLUGIN_DEST}/${f}"
+    safe_install_file "${PLUGIN_SRC}/${f}" "${PLUGIN_DEST}/${f}" "autostart plugin ${f}"
   done
 }
 
 install_plugin
-install_file "${JSON_SRC}" "${JSON_DEST}"
+safe_install_file "${JSON_SRC}" "${JSON_DEST}" "omarchy autostart-apps.json"
 
 if command -v omarchy-autostart-apps >/dev/null 2>&1; then
-  omarchy-autostart-apps apply 2>/dev/null || omarchy-autostart-apps sync 2>/dev/null || true
+  if [[ "${INSTALL_DRY_RUN}" == "1" ]]; then
+    echo "restore-vivobook-autostart: dry-run skip omarchy-autostart-apps apply"
+  else
+    omarchy-autostart-apps apply 2>/dev/null || omarchy-autostart-apps sync 2>/dev/null || true
+  fi
 elif [[ -f "${HYPR_SRC}" ]]; then
-  install_file "${HYPR_SRC}" "${HYPR_DEST}"
+  safe_install_file "${HYPR_SRC}" "${HYPR_DEST}" "hypr autostart.lua"
+fi
+
+if declare -F ensure_hypr_tm_block >/dev/null 2>&1; then
+  ensure_hypr_tm_block "${HYPR_DEST}" "${HYPR_SRC}"
+elif [[ -f "${HYPR_DEST}" ]] && ! grep -q 'omarchy-task-manager begin' "${HYPR_DEST}" 2>/dev/null; then
+  echo "restore-vivobook-autostart: WARNING missing omarchy-task-manager block in ${HYPR_DEST}" >&2
 fi
