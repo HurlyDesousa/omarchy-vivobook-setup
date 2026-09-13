@@ -1,0 +1,37 @@
+# AudioReach topology firmware for ASUS Vivobook S15 (X1E80100) on Omarchy ARM.
+# Builds from linux-msm/audioreach-topology at package time — no binary blobs in git.
+pkgname=audioreach-topology-vivobook
+pkgver=20250901
+pkgrel=1
+pkgdesc="AudioReach topology firmware for ASUS Vivobook S15 (Snapdragon X Elite X1E80100)"
+arch=('aarch64')
+url="https://github.com/linux-msm/audioreach-topology"
+license=('BSD-3-Clause')
+makedepends=('cmake' 'alsa-utils' 'm4')
+source=("git+https://github.com/linux-msm/audioreach-topology.git?signed#commit=e7b20b2b16cdda18eb8ae143c8d95c4815c0288e")
+sha256sums=('SKIP')
+
+# Upstream maps X1E80100-LENOVO-Thinkpad-T14s.m4 → X1E80100-ASUS-Vivobook-S15
+# (linux-msm/audioreach-topology CMakeLists.txt TPLGS; merged PR #22).
+# Kernel DTS model string must match: X1E80100-ASUS-Vivobook-S15
+# (linux-aarch64-vivobook PR #18).
+_topology='X1E80100-ASUS-Vivobook-S15'
+_fw_relpath='qcom/x1e80100/ASUSTeK/vivobook-s15'
+
+pkgver() {
+  cd "${srcdir}/audioreach-topology"
+  git describe --long --tags 2>/dev/null | sed 's/\([^-]*-g\)/r\1/;s/-/./g' \
+    || printf '%s.%s' "$(date -d "@$(git log -1 --format=%ct)" +%Y%m%d)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "${srcdir}/audioreach-topology"
+  cmake -B build -S .
+  cmake --build build --target "topology_${_topology}"
+}
+
+package() {
+  install -Dm644 \
+    "${srcdir}/audioreach-topology/build/${_fw_relpath}/${_topology}-tplg.bin" \
+    "${pkgdir}/usr/lib/firmware/${_fw_relpath}/${_topology}-tplg.bin"
+}

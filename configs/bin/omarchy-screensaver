@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# User override of packaged Omarchy screensaver. Same ttfx random-effect
+# animation as stock. A key or clickpad click exits. Do not poll hyprctl
+# for focus — that has aborted Hyprland on this machine.
+
+exit_screensaver() {
+  (( screensaver_exiting )) && exit 0
+  screensaver_exiting=1
+  trap - SIGINT SIGTERM SIGHUP SIGQUIT
+  printf '\033[?1000l' 2>/dev/null || true
+  "${HOME}/.local/bin/omarchy-screensaver-touchpad" on >/dev/null 2>&1 || true
+  hyprctl eval 'hl.config({ cursor = { invisible = false } })' &>/dev/null || hyprctl keyword cursor:invisible false &>/dev/null || true
+  pkill -x ttfx 2>/dev/null
+  pkill -f '[o]rg.omarchy.screensaver' 2>/dev/null
+  exit 0
+}
+
+screensaver_exiting=0
+trap exit_screensaver SIGINT SIGTERM SIGHUP SIGQUIT
+
+printf '\033]11;rgb:00/00/00\007'
+
+hyprctl eval 'hl.config({ cursor = { invisible = true } })' &>/dev/null || hyprctl keyword cursor:invisible true &>/dev/null
+
+# Click reporting only (not motion). A click dismisses; movement does not.
+printf '\033[?1000h'
+
+tty=$(tty 2>/dev/null)
+logo="${HOME}/.config/omarchy/branding/screensaver.txt"
+
+wait_for_terminal_resize() {
+  local deadline=$((SECONDS + 2))
+  while ((SECONDS < deadline)) && [[ $(stty size 2>/dev/null) == "24 80" ]]; do
+    sleep 0.02
+  done
+}
+
+wait_for_terminal_resize
+
+while true; do
+  ttfx -i "$logo" \
+    --frame-rate 120 \
+    --canvas-width 0 \
+    --canvas-height 0 \
+    --reuse-canvas \
+    --anchor-canvas c \
+    --anchor-text c \
+    --random-effect \
+    --no-eol \
+    --no-restore-cursor &
+
+  while pgrep -t "${tty#/dev/}" -x ttfx >/dev/null; do
+    if read -n1 -t 1; then
+      exit_screensaver
+    fi
+  done
+done

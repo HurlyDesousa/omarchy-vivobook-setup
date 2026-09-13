@@ -111,7 +111,10 @@ configs/
 docs/
   SECRETS.md              # re-auth checklist (no secrets in repo)
   GGUF.md                 # model download docs
+  AUDIOREACH-TOPOLOGY.md  # Vivobook AudioReach tplg package (HOLD from install-all)
   REPOS.md                # related repo pointers
+packages/
+  audioreach-topology-vivobook/  # Arch PKGBUILD — builds tplg at package time
 ```
 
 ## Inventory merge (TODO)
