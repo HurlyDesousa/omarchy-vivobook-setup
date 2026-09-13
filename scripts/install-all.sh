@@ -7,10 +7,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=lib/user-home.sh
 source "${SCRIPT_DIR}/lib/user-home.sh"
+# shellcheck source=lib/safe-apply.sh
+source "${SCRIPT_DIR}/lib/safe-apply.sh"
 _ORIGINAL_HOME="${HOME}"
 resolve_omarchy_home || exit 1
 CONFIGS_DIR="${REPO_ROOT}/configs"
 REPOS_DIR="${OMARCHY_REPOS_DIR:-${HOME}/src/omarchy-vivobook-setup/repos}"
+
+for arg in "$@"; do
+  case "${arg}" in
+    --dry-run) export INSTALL_DRY_RUN=1 ;;
+    --force) export INSTALL_FORCE=1 ;;
+  esac
+done
 
 # --- helpers -----------------------------------------------------------------
 
@@ -57,29 +66,7 @@ run_repo_install() {
 }
 
 apply_fragment() {
-  local src="$1"
-  local dest="$2"
-  local label="$3"
-
-  if [[ ! -f "${src}" ]]; then
-    warn "Missing inventory file: ${src} (${label}) — TODO: INVENTORY"
-    return 0
-  fi
-
-  mkdir -p "$(dirname "${dest}")"
-
-  if [[ -f "${dest}" ]] && cmp -s "${src}" "${dest}"; then
-    ok "Already applied: ${label}"
-    return 0
-  fi
-
-  if [[ -f "${dest}" ]]; then
-    info "Updating ${label} → ${dest}"
-  else
-    info "Installing ${label} → ${dest}"
-  fi
-  cp "${src}" "${dest}"
-  ok "${label}"
+  safe_apply_file "$1" "$2" "$3"
 }
 
 apply_patch_if_present() {
@@ -117,27 +104,61 @@ install_system_file() {
   local dest="$2"
   local label="$3"
   local mode="${4:-644}"
+  local tmp=""
+  local effective_src="${src}"
 
   if [[ ! -f "${src}" ]]; then
     warn "Missing inventory file: ${src} (${label})"
     return 0
   fi
 
-  if [[ -f "${dest}" ]] && cmp -s "${src}" "${dest}"; then
+  if grep -q '@OMARCHY_HOME@\|@HOME@' "${src}" 2>/dev/null; then
+    tmp="$(mktemp)"
+    expand_home_placeholders "${src}" > "${tmp}"
+    effective_src="${tmp}"
+  fi
+
+  if [[ -f "${dest}" ]] && cmp -s "${effective_src}" "${dest}"; then
+    [[ -n "${tmp}" ]] && rm -f "${tmp}"
     ok "Already applied: ${label}"
     return 0
   fi
 
+  if [[ -f "${dest}" ]] && _vivobook_is_dirty "${effective_src}" "${dest}"; then
+    if [[ "${INSTALL_FORCE}" == "1" ]]; then
+      _vivobook_timestamp_backup "${dest}" "${label// /_}" >/dev/null
+    elif [[ "${INSTALL_DRY_RUN}" == "1" ]]; then
+      [[ -n "${tmp}" ]] && rm -f "${tmp}"
+      info "Dry-run skip dirty system file: ${label} → ${dest}"
+      return 0
+    else
+      [[ -n "${tmp}" ]] && rm -f "${tmp}"
+      warn "Skipping dirty system file (use --force): ${label} → ${dest}"
+      return 0
+    fi
+  elif [[ -f "${dest}" ]]; then
+    _vivobook_timestamp_backup "${dest}" "${label// /_}" >/dev/null
+  fi
+
+  if [[ "${INSTALL_DRY_RUN}" == "1" ]]; then
+    [[ -n "${tmp}" ]] && rm -f "${tmp}"
+    info "Dry-run would install system file: ${label} → ${dest}"
+    return 0
+  fi
+
   if [[ -w "$(dirname "${dest}")" ]]; then
-    cp "${src}" "${dest}"
+    cp "${effective_src}" "${dest}"
     chmod "${mode}" "${dest}" 2>/dev/null || true
   elif command -v sudo >/dev/null 2>&1; then
-    sudo cp "${src}" "${dest}"
+    sudo cp "${effective_src}" "${dest}"
     sudo chmod "${mode}" "${dest}" 2>/dev/null || true
   else
+    [[ -n "${tmp}" ]] && rm -f "${tmp}"
     warn "Cannot install ${label} → ${dest} (sudo required)"
     return 1
   fi
+  [[ -n "${tmp}" ]] && rm -f "${tmp}"
+  _vivobook_record_manifest "${dest}"
   ok "${label}"
 }
 
@@ -164,38 +185,13 @@ main() {
   info "linux-aarch64-vivobook: kernel install is manual/reboot-required — see docs/REPOS.md"
   echo
 
-  # 3. Hyprland config fragments
+  # 3. Hyprland input (seed-if-absent; autostart deferred until after task-manager)
   info "=== Hyprland ==="
-  if command -v omarchy-autostart-apps >/dev/null 2>&1 \
-      && [[ -f "${CONFIGS_DIR}/omarchy/autostart-apps.json" ]]; then
-    mkdir -p "${HOME}/.config/omarchy"
-    apply_fragment \
-      "${CONFIGS_DIR}/omarchy/autostart-apps.json" \
-      "${HOME}/.config/omarchy/autostart-apps.json" \
-      "omarchy autostart-apps.json"
-    info "Regenerating hypr autostart.lua via omarchy-autostart-apps…"
-    omarchy-autostart-apps apply 2>/dev/null || omarchy-autostart-apps sync 2>/dev/null \
-      || apply_fragment \
-        "${CONFIGS_DIR}/hypr/autostart.lua.fragment" \
-        "${HOME}/.config/hypr/autostart.lua" \
-        "hypr autostart.lua (fallback fragment)"
-  else
-    apply_fragment \
-      "${CONFIGS_DIR}/hypr/autostart.lua.fragment" \
-      "${HOME}/.config/hypr/autostart.lua" \
-      "hypr autostart.lua"
-    if [[ -f "${CONFIGS_DIR}/omarchy/autostart-apps.json" ]]; then
-      mkdir -p "${HOME}/.config/omarchy"
-      apply_fragment \
-        "${CONFIGS_DIR}/omarchy/autostart-apps.json" \
-        "${HOME}/.config/omarchy/autostart-apps.json" \
-        "omarchy autostart-apps.json"
-    fi
-  fi
-  apply_fragment \
+  seed_if_absent \
     "${CONFIGS_DIR}/hypr/input.lua.fragment" \
     "${HOME}/.config/hypr/input.lua" \
     "hypr input.lua"
+  info "Hypr autostart restore deferred until after omarchy-task-manager install"
   echo
 
   # 4. Omarchy shell.json fragment (merge note — full merge TODO: INVENTORY)
@@ -283,17 +279,23 @@ main() {
   fi
   echo
 
-  # 7. Quickshell QML patches
-  info "=== Quickshell QML patches ==="
-  if [[ -f "${CONFIGS_DIR}/quickshell/idle.patch" ]]; then
-    # Target path is placeholder until inventory confirms install location
-    QS_IDLE_TARGET="${HOME}/.config/quickshell/idle.qml"
-    apply_patch_if_present \
-      "${CONFIGS_DIR}/quickshell/idle.patch" \
-      "${QS_IDLE_TARGET}" \
-      "quickshell idle policy"
+  # 7. Quickshell / Omarchy idle Service.qml patch (via restore-idle-dim.hook)
+  info "=== Omarchy idle Service.qml ==="
+  install_system_file \
+    "${CONFIGS_DIR}/bin/omarchy-idle-dim" \
+    "/usr/local/bin/omarchy-idle-dim" \
+    "omarchy-idle-dim → /usr/local/bin" \
+    "755"
+  IDLE_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-idle-dim.hook"
+  if [[ -x "${IDLE_HOOK}" ]]; then
+    info "Running restore-idle-dim.hook…"
+    "${IDLE_HOOK}" || warn "restore-idle-dim.hook failed (sudo may be required for /usr/share/omarchy/shell/plugins/services/idle/Service.qml)"
+  elif [[ -f "${CONFIGS_DIR}/omarchy/hooks/post-update.d/restore-idle-dim.hook" ]]; then
+    info "Running restore-idle-dim.hook from inventory…"
+    bash "${CONFIGS_DIR}/omarchy/hooks/post-update.d/restore-idle-dim.hook" \
+      || warn "restore-idle-dim.hook failed (sudo may be required)"
   else
-    warn "No configs/quickshell/idle.patch — TODO: INVENTORY"
+    warn "No restore-idle-dim.hook — TODO: INVENTORY"
   fi
 
   if [[ -f "${CONFIGS_DIR}/quickshell/lock-lidharden.patch" ]]; then
@@ -407,12 +409,20 @@ main() {
           || warn "Could not enable omarchy-vivobook-powerprofiles-autodetect.service"
         sudo systemctl enable --now omarchy-vivobook-gpu.path 2>/dev/null \
           || warn "Could not enable omarchy-vivobook-gpu.path"
+        sudo systemctl enable omarchy-vivobook-gpu.service 2>/dev/null \
+          || warn "Could not enable omarchy-vivobook-gpu.service"
+        sudo systemctl start omarchy-vivobook-gpu.service 2>/dev/null \
+          || warn "Could not start omarchy-vivobook-gpu.service (boot apply for existing mode file)"
       else
         systemctl daemon-reload 2>/dev/null || warn "systemctl daemon-reload failed"
         systemctl enable omarchy-vivobook-powerprofiles-autodetect.service 2>/dev/null \
           || warn "Could not enable omarchy-vivobook-powerprofiles-autodetect.service"
         systemctl enable --now omarchy-vivobook-gpu.path 2>/dev/null \
           || warn "Could not enable omarchy-vivobook-gpu.path"
+        systemctl enable omarchy-vivobook-gpu.service 2>/dev/null \
+          || warn "Could not enable omarchy-vivobook-gpu.service"
+        systemctl start omarchy-vivobook-gpu.service 2>/dev/null \
+          || warn "Could not start omarchy-vivobook-gpu.service (boot apply for existing mode file)"
       fi
     fi
     if command -v udevadm >/dev/null 2>&1; then
@@ -488,14 +498,26 @@ main() {
   fi
   echo
 
-  # 7e. Login autostart (sw.art.autostart plugin + JSON + hypr block)
+  # 7e. Login autostart (after omarchy-task-manager — restores TM block + sw.art.autostart)
   info "=== Login autostart ==="
   AS_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-autostart.hook"
   if [[ -x "${AS_HOOK}" ]]; then
     info "Running restore-vivobook-autostart.hook…"
     "${AS_HOOK}" || warn "restore-vivobook-autostart.hook failed"
+  elif [[ -f "${CONFIGS_DIR}/omarchy/hooks/post-update.d/restore-vivobook-autostart.hook" ]]; then
+    bash "${CONFIGS_DIR}/omarchy/hooks/post-update.d/restore-vivobook-autostart.hook" \
+      || warn "restore-vivobook-autostart.hook failed"
   else
     warn "restore-vivobook-autostart.hook not installed yet — re-run after hooks section"
+  fi
+  ensure_hypr_tm_block \
+    "${HOME}/.config/hypr/autostart.lua" \
+    "${CONFIGS_DIR}/hypr/autostart.lua.fragment"
+  if [[ -f "${HOME}/.config/hypr/autostart.lua" ]] \
+      && ! grep -q 'omarchy-task-manager begin' "${HOME}/.config/hypr/autostart.lua" 2>/dev/null; then
+    fail "Hypr autostart missing omarchy-task-manager block after restore — check omarchy-task-manager install"
+  else
+    ok "Hypr autostart omarchy-task-manager block verified"
   fi
   if ! command -v omarchy-autostart-apps >/dev/null 2>&1; then
     warn "omarchy-autostart-apps not in PATH — install from live system (docs/INSTALL-POINTERS.md); bar panel needs it"
@@ -529,9 +551,9 @@ main() {
     warn "cursor not at ~/.local/bin/cursor — reinstall Cursor ARM build (docs/INSTALL-POINTERS.md)"
   fi
 
-  # pi (~/.pi/agent): models.json is fully managed; settings.json only seeded when absent.
+  # pi (~/.pi/agent): merge llama-local only; settings.json only seeded when absent.
   # Nothing under ~/.pi is ever read back into this repo (auth.json etc. are secrets).
-  apply_fragment \
+  merge_pi_models \
     "${CONFIGS_DIR}/pi/models.json" \
     "${HOME}/.pi/agent/models.json" \
     "pi models.json (llama-local)"

@@ -45,9 +45,9 @@ vivobook_source_user_home() {
   local candidate lib=""
 
   for candidate in \
-    "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
+    "${HOME}/.local/lib/omarchy-vivobook/user-home.sh" \
     "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}" \
-    "${HOME}/.local/lib/omarchy-vivobook/user-home.sh"; do
+    "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh"; do
     if [[ -n "${candidate}" && -f "${candidate}" ]]; then
       lib="${candidate}"
       break

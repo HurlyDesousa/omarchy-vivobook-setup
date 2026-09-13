@@ -1,6 +1,24 @@
 #!/bin/bash
 # Called on boot (via omarchy-powerprofiles-init) and on AC plug/unplug (udev).
-export PATH=/usr/share/omarchy/bin:/usr/bin:/usr/local/bin:$PATH
-export HOME=/home/hurly
-export OMARCHY_POWERPROFILES_STATE_DIR=/home/hurly/.local/state/omarchy/powerprofiles
+set -euo pipefail
+
+VIVOBOOK_LIB="${OMARCHY_VIVOBOOK_LIB:-${HOME}/.local/lib/omarchy-vivobook}"
+if [[ -f "${VIVOBOOK_LIB}/user-home.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${VIVOBOOK_LIB}/user-home.sh"
+  vivobook_ensure_user_home
+elif [[ -f /usr/local/lib/omarchy-vivobook/user-home.sh ]]; then
+  # shellcheck source=/dev/null
+  source /usr/local/lib/omarchy-vivobook/user-home.sh
+  vivobook_ensure_user_home
+elif [[ "${EUID}" -eq 0 ]]; then
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    HOME="$(getent passwd "${SUDO_USER}" 2>/dev/null | cut -d: -f6 || true)"
+  fi
+  HOME="${HOME:-/home/hurly}"
+  export HOME OMARCHY_HOME="${HOME}"
+fi
+
+export PATH=/usr/share/omarchy/bin:/usr/bin:/usr/local/bin:${PATH}
+export OMARCHY_POWERPROFILES_STATE_DIR="${HOME}/.local/state/omarchy/powerprofiles"
 exec /usr/share/omarchy/bin/omarchy-powerprofiles-set autodetect

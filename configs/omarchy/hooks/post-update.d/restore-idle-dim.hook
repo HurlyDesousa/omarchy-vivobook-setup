@@ -5,117 +5,118 @@
 # Do NOT raise lock/screensaver; do NOT use ~10% dim. Never stop x1e-ec-tool.
 set -euo pipefail
 
-for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
+for _vb_lib in "${HOME}/.local/lib/omarchy-vivobook/user-home.sh" \
                "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
   [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
     source "${_vb_lib}"; vivobook_ensure_user_home; break; }
 done
-[[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
 
+SAFE_APPLY=""
+for candidate in \
+  "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/safe-apply.sh}" \
+  "${HOME}/src/omarchy-vivobook-setup/scripts/lib/safe-apply.sh"; do
+  [[ -n "${candidate}" && -f "${candidate}" ]] && { SAFE_APPLY="${candidate}"; break; }
+done
+[[ -n "${SAFE_APPLY}" ]] && { # shellcheck source=/dev/null
+  source "${SAFE_APPLY}"; }
+
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+CONFIGS="${REPO_ROOT}/configs"
 TARGET="/usr/share/omarchy/shell/plugins/services/idle/Service.qml"
 PATCHED="${HOME}/.local/share/omarchy/idle-dim/Service.qml"
-HELPER="${HOME}/.local/bin/omarchy-idle-dim"
+BACKUP_DIR="${HOME}/.local/share/omarchy/idle-dim"
+PATCH_CANDIDATES=(
+  "${CONFIGS}/quickshell/idle.patch"
+  "${HOME}/.local/share/omarchy-vivobook-setup/configs/quickshell/idle.patch"
+)
+HELPER_LOCAL="${HOME}/.local/bin/omarchy-idle-dim"
+HELPER_SYSTEM="/usr/local/bin/omarchy-idle-dim"
 SHELL_JSON="${HOME}/.config/omarchy/shell.json"
+SHELL_FRAGMENT="${CONFIGS}/omarchy/shell.json.fragment"
 
-if [[ -f $PATCHED ]]; then
-  if [[ ! -f $TARGET ]] || ! grep -q 'dimTimeoutSeconds' "$TARGET" 2>/dev/null; then
-    cp "$PATCHED" "$TARGET"
-  elif ! grep -q '/home/hurly/.local/bin/omarchy-idle-dim' "$TARGET" 2>/dev/null; then
-    cp "$PATCHED" "$TARGET"
+mkdir -p "${BACKUP_DIR}"
+
+# Ensure idle-dim helper exists (prefer repo inventory over inline heredoc).
+if [[ -f "${CONFIGS}/bin/omarchy-idle-dim" ]]; then
+  install -m 0755 "${CONFIGS}/bin/omarchy-idle-dim" "${HELPER_LOCAL}"
+  if command -v sudo >/dev/null 2>&1; then
+    sudo install -m 0755 "${CONFIGS}/bin/omarchy-idle-dim" "${HELPER_SYSTEM}" 2>/dev/null || true
+  elif [[ -w /usr/local/bin ]]; then
+    install -m 0755 "${CONFIGS}/bin/omarchy-idle-dim" "${HELPER_SYSTEM}" 2>/dev/null || true
   fi
 fi
 
-# Ensure helper exists at 25% + kbd idle (never ~10%, never task-manager prefs path)
-if [[ ! -x $HELPER ]] || ! grep -q 'DIM_PCT=25' "$HELPER" 2>/dev/null || ! grep -q 'kbd-backlight' "$HELPER" 2>/dev/null; then
-  install -m 0755 /dev/stdin "$HELPER" <<'EOS'
-#!/bin/bash
-# Dim/restore backlight + keyboard RGB for Omarchy idle.dim (Quickshell IdleMonitor).
-set -euo pipefail
-DEV=dp_aux_backlight
-DIM_PCT=25
-STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/omarchy-idle-dim.state"
-KBD_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/kbd-backlight"
-if [[ ! -f $KBD_STATE && -f /home/hurly/.local/state/omarchy/kbd-backlight ]]; then
-  KBD_STATE=/home/hurly/.local/state/omarchy/kbd-backlight
-fi
-cur() { brightnessctl -d "$DEV" get; }
-max() { brightnessctl -d "$DEV" max; }
-setb() { brightnessctl -d "$DEV" -q set "$1"; }
-kbd_off() {
-  local auto_off="true"
-  if [[ -f $KBD_STATE ]]; then
-    if command -v jq >/dev/null 2>&1; then
-      auto_off=$(jq -r '.auto_off // true' "$KBD_STATE" 2>/dev/null || echo true)
-    else
-      auto_off=$(sed -n 's/.*"auto_off"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$KBD_STATE" | head -1)
-      [[ -n $auto_off ]] || auto_off="true"
-    fi
+apply_idle_patch() {
+  local patch="$1"
+  [[ -f "${patch}" && -f "${TARGET}" ]] || return 0
+
+  if [[ ! -f "${BACKUP_DIR}/Service.qml.stock" ]]; then
+    cp -a "${TARGET}" "${BACKUP_DIR}/Service.qml.stock"
   fi
-  if [[ $auto_off == "false" ]]; then
-    logger -t omarchy-idle-dim "kbd off skip (auto_off=false)"
+
+  if patch -R -p1 --dry-run -d / < "${patch}" >/dev/null 2>&1; then
+    echo "restore-idle-dim: idle Service.qml patch already applied"
+    cp -a "${TARGET}" "${PATCHED}" 2>/dev/null || true
     return 0
   fi
-  if command -v x1e-ec-tool >/dev/null 2>&1; then
-    x1e-ec-tool kb '#000000' >/dev/null 2>&1 || true
-    logger -t omarchy-idle-dim "kbd off #000000"
-  fi
-}
-kbd_restore() {
-  local hex="#ffffff" enabled="true"
-  if [[ -f $KBD_STATE ]]; then
-    if command -v jq >/dev/null 2>&1; then
-      hex=$(jq -r '.hex // "#ffffff"' "$KBD_STATE" 2>/dev/null || echo "#ffffff")
-      enabled=$(jq -r '.enabled // true' "$KBD_STATE" 2>/dev/null || echo true)
-    else
-      hex=$(sed -n 's/.*"hex"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$KBD_STATE" | head -1)
-      enabled=$(sed -n 's/.*"enabled"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$KBD_STATE" | head -1)
-      [[ -n $hex ]] || hex="#ffffff"
-      [[ -n $enabled ]] || enabled="true"
-    fi
-  fi
-  if [[ $enabled != "true" ]]; then
-    logger -t omarchy-idle-dim "kbd restore skip (enabled=$enabled)"
-    return 0
-  fi
-  if command -v x1e-ec-tool >/dev/null 2>&1; then
-    x1e-ec-tool kb "$hex" >/dev/null 2>&1 || true
-    logger -t omarchy-idle-dim "kbd restore $hex"
-  fi
-}
-cmd=${1:-}
-case "$cmd" in
-  dim)
-    saved=$(cur); maxb=$(max); target=$(( maxb * DIM_PCT / 100 ))
-    (( target < 1 )) && target=1
-    if (( target >= saved )); then
-      echo "$saved" > "$STATE"
-      logger -t omarchy-idle-dim "dim skip (already <=${DIM_PCT}%): $saved"
-    else
-      echo "$saved" > "$STATE"; setb "$target"
-      logger -t omarchy-idle-dim "dim ${saved}->${target} (${DIM_PCT}% of ${maxb})"
-    fi
-    kbd_off
-    ;;
-  restore)
-    if [[ -f $STATE ]]; then setb "$(cat "$STATE")"; rm -f "$STATE"; logger -t omarchy-idle-dim "restore done"; fi
-    kbd_restore
-    ;;
-  *) echo "usage: $0 dim|restore" >&2; exit 2 ;;
-esac
-EOS
-fi
 
-python3 - <<'PY'
-import json
+  if patch -N -p1 --dry-run -d / < "${patch}" >/dev/null 2>&1; then
+    if [[ -w "${TARGET}" ]]; then
+      patch -N -p1 -d / < "${patch}"
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo patch -N -p1 -d / < "${patch}"
+    else
+      echo "restore-idle-dim: cannot write ${TARGET} — run with sudo" >&2
+      return 1
+    fi
+    cp -a "${TARGET}" "${PATCHED}"
+    echo "restore-idle-dim: applied idle patch from ${patch}"
+  elif [[ -f "${PATCHED}" ]]; then
+    if [[ ! -f "${TARGET}" ]] || ! grep -q 'dimTimeoutSeconds' "${TARGET}" 2>/dev/null \
+        || ! grep -q '/usr/local/bin/omarchy-idle-dim' "${TARGET}" 2>/dev/null; then
+      if [[ -w "${TARGET}" ]]; then
+        cp "${PATCHED}" "${TARGET}"
+      elif command -v sudo >/dev/null 2>&1; then
+        sudo cp "${PATCHED}" "${TARGET}"
+      fi
+      echo "restore-idle-dim: restored patched Service.qml from backup"
+    fi
+  else
+    echo "restore-idle-dim: idle patch does not apply cleanly; manual review needed" >&2
+    return 1
+  fi
+}
+
+PATCH=""
+for c in "${PATCH_CANDIDATES[@]}"; do
+  [[ -n "${c}" && -f "${c}" ]] && { PATCH="${c}"; break; }
+done
+[[ -n "${PATCH}" ]] && apply_idle_patch "${PATCH}"
+
+if declare -F merge_shell_json_idle_keys >/dev/null 2>&1; then
+  merge_shell_json_idle_keys "${SHELL_JSON}" "${SHELL_FRAGMENT}"
+elif [[ -f "${SHELL_JSON}" && -f "${SHELL_FRAGMENT}" ]]; then
+  python3 - <<'PY' "${SHELL_JSON}" "${SHELL_FRAGMENT}"
+import json, sys
 from pathlib import Path
-p = Path.home() / ".config/omarchy/shell.json"
-if not p.exists():
+
+dest = Path(sys.argv[1])
+fragment = Path(sys.argv[2])
+desired = json.loads(fragment.read_text()).get("idle") or {}
+if not desired:
     raise SystemExit(0)
-d = json.loads(p.read_text())
-idle = d.get("idle") or {}
-idle["dim"] = 180
-idle["lock"] = 300
-idle["screensaver"] = 400
-d["idle"] = idle
-p.write_text(json.dumps(d, indent=2) + "\n")
+data = json.loads(dest.read_text())
+idle = data.get("idle") or {}
+changed = False
+for key, value in desired.items():
+    if key not in idle:
+        idle[key] = value
+        changed = True
+    elif idle[key] != value:
+        print(f"restore-idle-dim: keeping live idle.{key}={idle[key]} (desired {value})")
+if changed:
+    data["idle"] = idle
+    dest.write_text(json.dumps(data, indent=2) + "\n")
+    print("restore-idle-dim: merged missing idle keys into shell.json")
 PY
+fi
