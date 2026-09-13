@@ -14,7 +14,6 @@ Item {
   readonly property string home: Quickshell.env("HOME")
   readonly property string stayAwakeStateDir: home + "/.local/state/omarchy/indicators"
   readonly property string stayAwakeStatePath: stayAwakeStateDir + "/stay-awake"
-  readonly property string idleWatchBin: home + "/.local/bin/omarchy-idle-watch"
   readonly property string launchScreensaverBin: home + "/.local/bin/omarchy-launch-screensaver"
   readonly property int defaultScreensaverOnAcSeconds: 900
   readonly property int defaultScreensaverOnBatterySeconds: 300
@@ -47,7 +46,6 @@ Item {
   property var boundLock: null
   property string lastEvent: "starting"
   property string lastEventAt: ""
-  property string watchLine: ""
   property double stillSinceMs: 0
   property var screensaverWindows: ({})
   property int screensaverWindowCount: 0
@@ -155,7 +153,6 @@ Item {
     lockTimer.stop()
     dimTimer.stop()
     screensaverLaunchGraceTimer.stop()
-    idleWatch.running = false
     restoreDisplay(reason || "lock")
     stopScreensaver()
     root.idledThisCycle = false
@@ -177,7 +174,6 @@ Item {
     lockTimer.stop()
     dimTimer.stop()
     screensaverLaunchGraceTimer.stop()
-    idleWatch.running = false
     restoreDisplay(reason || "lock")
     stopScreensaver()
     root.idledThisCycle = false
@@ -191,10 +187,7 @@ Item {
     var svc = lockService()
     if (svc && typeof svc.beginLock === "function") {
       var ok = svc.beginLock(false)
-      if (!ok) {
-        logEvent("lock-failed", "beginLock")
-        restartIdleWatch()
-      }
+      if (!ok) logEvent("lock-failed", "beginLock")
       return
     }
     runProcess(lockProcess, "lock", "omarchy-shell lock lock >/dev/null")
@@ -212,7 +205,6 @@ Item {
     root.screensaverStartedThisCycle = false
     root.pendingLock = false
     root.cycleStartedMs = Date.now()
-    idleWatch.running = false
     resetScreensaverWindows()
 
     if (root.dimTimeoutSeconds > 0) {
@@ -243,7 +235,6 @@ Item {
     root.pendingLock = false
     root.cycleStartedMs = 0
     resetScreensaverWindows()
-    if (root.idleEnabled && !root.lockAlreadyUp()) restartIdleWatch()
   }
 
   function resetScreensaverWindows() {
@@ -323,37 +314,9 @@ Item {
     else handleActiveSignal()
   }
 
-  function handleWatchLine(raw) {
-    var line = String(raw || "").trim()
-    if (!line) return
-    root.watchLine = line
-    if (line === "watch-start") {
-      root.stillSinceMs = Date.now()
-      logEvent("idle-watch", "started timeout=" + root.firstIdleTimeoutSeconds)
-      return
-    }
-    if (line === "active") {
-      logEvent("idle-watch", "active")
-      handleActiveSignal()
-      return
-    }
-    if (line === "idle") {
-      logEvent("idle-watch", "idle")
-      startIdleCycle()
-    }
-  }
-
-  function restartIdleWatch() {
-    idleWatch.running = false
-    Qt.callLater(function() {
-      if (root.idleEnabled && !root.idledThisCycle && !root.lockAlreadyUp() && !idleWatch.running)
-        idleWatch.running = true
-    })
-  }
-
   function statusJson() {
     return JSON.stringify({
-      version: "1.9.0",
+      version: "1.10.0",
       enabled: root.idleEnabled,
       stayAwake: root.stayAwake,
       idle: idleMonitor.isIdle,
@@ -371,8 +334,6 @@ Item {
       lockDelay: root.lockDelaySeconds,
       screensaverWindows: root.screensaverWindowCount,
       stillMs: root.stillSinceMs === 0 ? 0 : Math.round((Date.now() - root.stillSinceMs) / 1000),
-      watch: idleWatch.running,
-      watchLine: root.watchLine,
       lastEvent: root.lastEvent,
       lastEventAt: root.lastEventAt
     })
@@ -410,12 +371,6 @@ Item {
 
   function setIdleEnabled(value) {
     return applyStayAwake(!value, true, "ipc")
-  }
-
-  onFirstIdleTimeoutSecondsChanged: if (root.idleEnabled && !root.idledThisCycle && !root.lockAlreadyUp()) restartIdleWatch()
-  onIdleEnabledChanged: {
-    if (root.idleEnabled && !root.idledThisCycle && !root.lockAlreadyUp()) restartIdleWatch()
-    else idleWatch.running = false
   }
 
   IdleMonitor {
@@ -461,22 +416,6 @@ Item {
   Connections {
     target: Hyprland
     function onRawEvent(event) { root.handleHyprlandEvent(event) }
-  }
-
-  Process {
-    id: idleWatch
-    command: [root.idleWatchBin, String(root.firstIdleTimeoutSeconds)]
-    stdout: SplitParser {
-      onRead: function(line) { root.handleWatchLine(line) }
-    }
-    stderr: SplitParser {
-      onRead: function(line) { root.logEvent("idle-watch-err", line) }
-    }
-    onExited: function(exitCode, exitStatus) {
-      root.logEvent("idle-watch-exit", "code=" + exitCode + " status=" + exitStatus)
-      if (root.idleEnabled && !root.idledThisCycle && !root.lockAlreadyUp())
-        Qt.callLater(function() { if (root.idleEnabled && !idleWatch.running && !root.idledThisCycle && !root.lockAlreadyUp()) idleWatch.running = true })
-    }
   }
 
   Process {
@@ -561,13 +500,12 @@ Item {
     function onLockRequestedChanged() {
       if (!root.boundLock) return
       if (root.boundLock.lockRequested) root.abandonForLock("lock-requested")
-      else if (root.idleEnabled) root.restartIdleWatch()
     }
   }
 
   Component.onCompleted: {
     root.stillSinceMs = Date.now()
-    logEvent("service-ready", "1.9.0")
+    logEvent("service-ready", "1.10.0")
     refreshStayAwakeState()
     Qt.callLater(root.refreshLockBinding)
   }

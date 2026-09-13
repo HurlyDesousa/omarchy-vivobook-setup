@@ -90,6 +90,7 @@ Panel {
     }
 
     function refreshList() {
+        listProc.command = [root.backend, "list"].concat(root.showSettings ? [] : ["--apps-only"])
         if (listProc.running)
             listProc.running = false
         listProc.running = true

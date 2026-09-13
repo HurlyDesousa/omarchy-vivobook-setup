@@ -1,7 +1,7 @@
 # AudioReach topology firmware for ASUS Vivobook S15 (X1E80100) on Omarchy ARM.
 # Builds from linux-msm/audioreach-topology at package time — no binary blobs in git.
 pkgname=audioreach-topology-vivobook
-pkgver=20250901
+pkgver=v1.0.4.r9.ge7b20b2
 pkgrel=1
 pkgdesc="AudioReach topology firmware for ASUS Vivobook S15 (Snapdragon X Elite X1E80100)"
 arch=('aarch64')

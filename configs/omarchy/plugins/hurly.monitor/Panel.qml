@@ -388,7 +388,13 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  Component.onCompleted: refresh()
+  // Defer the first omarchy-monitor-state read until after the bar paints.
+  Timer {
+    interval: 400
+    running: true
+    repeat: false
+    onTriggered: if (!root.opened) root.refresh()
+  }
 
   // KeyboardPanel primes focus at open-time, so SUPER-bound IPC summons land
   // with j/k ready to navigate. Keep a default landing point, but don't paint
@@ -413,7 +419,7 @@ Panel {
   onVisibleSectionsChanged: clampCursor()
 
   // Only poll while the panel is open; the bar glyph tracks monitor count via
-  // Quickshell.screens, and open-time refresh + Component.onCompleted cover the
+  // Quickshell.screens. A delayed first refresh plus open-time refresh cover the
   // rest. External brightness changes are reflected whenever the panel is open.
   Timer {
     interval: 5000
