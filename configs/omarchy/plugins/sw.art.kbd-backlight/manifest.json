@@ -3,7 +3,7 @@
   "id": "sw.art.kbd-backlight",
   "name": "Keyboard Backlight",
   "version": "0.5.5-41",
-  "author": "Toby Swart",
+  "author": "Hurly Swart",
   "license": "MIT",
   "description": "Keyboard RGB backlight control for ASUS Vivobook (x1e-ec-tool solid color)",
   "kinds": [

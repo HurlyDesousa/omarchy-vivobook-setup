@@ -1,6 +1,6 @@
 # omarchy-vivobook-setup
 
-Durable restore repo for Toby's **ASUS Vivobook S15** (`S5507QA`, Snapdragon X Elite) Omarchy Hyprland customizations after a fresh Omarchy ARM reinstall.
+Durable restore repo for Hurly's **ASUS Vivobook S15** (`S5507QA`, Snapdragon X Elite) Omarchy Hyprland customizations after a fresh Omarchy ARM reinstall.
 
 > **Inventory pending:** Omarchy Master will send a live inventory dump soon. Files under `configs/` marked with `TODO: INVENTORY` are placeholders until that merge. See [Inventory merge](#inventory-merge-todo) below.
 

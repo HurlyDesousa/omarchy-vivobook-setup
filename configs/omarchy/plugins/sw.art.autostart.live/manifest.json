@@ -3,7 +3,7 @@
   "id": "sw.art.autostart",
   "name": "Autostart",
   "version": "1.2.0",
-  "author": "Toby Swart",
+  "author": "Hurly Swart",
   "license": "MIT",
   "description": "Login autostart list, plus a default workspace per monitor",
   "kinds": [
