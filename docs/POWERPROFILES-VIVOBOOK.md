@@ -61,24 +61,23 @@ Active Vivobook mode is stored in `~/.local/state/omarchy/powerprofiles/vivobook
 | `~/.local/lib/omarchy-vivobook/` | Installed copies (chmod +x) |
 | `/usr/share/omarchy/bin/omarchy-powerprofiles-*` | Symlinks restored by `restore-vivobook-powerprofiles.hook` |
 
-## Power panel QML polish
+## Power panel (hurly.power)
 
-Stock Omarchy lays out four profile buttons in a single row. Overlays under `configs/omarchy/overlays/panels/power/` use a **2×2 grid**:
+Live bar widget is the user clone `hurly.power` under `configs/omarchy/plugins/hurly.power/` (installed to `~/.config/omarchy/plugins/hurly.power/`). Stock `omarchy.power` stays disabled so the two do not collide on the `omarchy.power` IPC target.
+
+The panel shows **Cord draw** on AC and **Battery draw** on pack. Qualcomm `power_now` and USB-C UCSI current do not track load on this Vivobook, so `read-draw` estimates watts from CPU busy time and clocks (GPU clock when it leaves idle) and scales to the pack gauge when that reading actually moves. Time left after unplug is energy ÷ live draw when UPower has no time-to-empty yet.
+
+Profile buttons stay a **2×2 grid**:
 
 - **Row 1:** Power Saver | Balanced
 - **Row 2:** Performance | Full Speed
 
-Additional polish:
-
-- **`Model.js`** — `profileLabel()` for human labels (`Full Speed`, `Power Saver`, …), ordered profile list, and 2D keyboard navigation
-- **`Panel.qml`** — 2×2 grid; uses `Model.profileLabel()` instead of naive capitalize
-
-`restore-vivobook-power-panel.hook` copies these onto `/usr/share/omarchy/shell/plugins/panels/power/` (uses `sudo` when the target is not user-writable).
+`restore-vivobook-power-panel.hook` copies the clone into the user plugin dir. It does not write `/usr/share/omarchy/`.
 
 ## Troubleshooting
 
 - **Wrappers not used after Omarchy update:** run `~/.config/omarchy/hooks/post-update.d/restore-vivobook-powerprofiles.hook` or re-run `./scripts/install-all.sh`
-- **Tray still shows `Full-speed` or single row:** run `restore-vivobook-power-panel.hook` (may need sudo), then `omarchy-restart-shell`
+- **Tray still shows `Full-speed` or the stock single-row panel:** run `restore-vivobook-power-panel.hook`, confirm the bar id is `hurly.power`, then `omarchy restart shell`
 - **Wrong profile after plug/unplug:** confirm udev rule and `omarchy-vivobook-powerprofiles-autodetect.service` are installed (`./scripts/install-all.sh` with sudo)
 - **Fans unchanged:** confirm `x1e-ec-tool.service` is active and `/usr/local/bin/x1e-ec-tool profile N` works
 - **PPD warning on synthetic modes:** expected if PPD rejects a repeat set; EC profile is still applied

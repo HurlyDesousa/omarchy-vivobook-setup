@@ -447,7 +447,7 @@ main() {
   PANEL_HOOK="${HOME}/.config/omarchy/hooks/post-update.d/restore-vivobook-power-panel.hook"
   if [[ -x "${PANEL_HOOK}" ]]; then
     info "Running restore-vivobook-power-panel.hook…"
-    "${PANEL_HOOK}" || warn "restore-vivobook-power-panel.hook failed (sudo may be required for /usr/share/omarchy/shell/plugins/panels/power/)"
+    "${PANEL_HOOK}" || warn "restore-vivobook-power-panel.hook failed (could not restore ~/.config/omarchy/plugins/hurly.power)"
   else
     warn "restore-vivobook-power-panel.hook not installed yet — re-run after hooks section"
   fi

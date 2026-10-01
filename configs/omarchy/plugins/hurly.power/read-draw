@@ -1,0 +1,161 @@
+#!/usr/bin/python3
+"""Live system draw for the power panel.
+
+Qualcomm's battery gauge (power_now) and USB-C UCSI current_now do not track
+load on this Vivobook: the pack reading can sit still under a 12-core burn,
+and UCSI current is the PD contract (4.32 A), not wall power. This helper
+estimates watts from CPU busy time and clocks, then scales that estimate to
+the gauge whenever the gauge actually moves.
+"""
+
+from __future__ import annotations
+
+import glob
+import os
+import sys
+import time
+
+PS = "/sys/class/power_supply"
+GPU_DEVFREQ = "/sys/devices/platform/soc@0/3d00000.gpu/devfreq/3d00000.gpu"
+# Board priors for the X Elite Vivobook S15. Idle covers display + chipset;
+# CPU_PEAK is extra watts at 100% busy on every core at max freq.
+IDLE_W = 3.2
+CPU_PEAK_W = 24.0
+GPU_PEAK_W = 10.0
+POLL_S = 0.4
+
+
+def read(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
+def read_int(path: str) -> int:
+    try:
+        return int(read(path))
+    except ValueError:
+        return 0
+
+
+def cpu_times() -> tuple[int, int]:
+    try:
+        with open("/proc/stat", encoding="utf-8") as fh:
+            parts = [int(x) for x in fh.readline().split()[1:]]
+    except (OSError, ValueError):
+        return 0, 0
+    idle = parts[3] + (parts[4] if len(parts) > 4 else 0)
+    return sum(parts), idle
+
+
+def cpu_freq_ratio() -> float:
+    weighted = 0.0
+    cores = 0
+    for policy in glob.glob("/sys/devices/system/cpu/cpufreq/policy*"):
+        cur = read_int(os.path.join(policy, "scaling_cur_freq"))
+        mx = read_int(os.path.join(policy, "cpuinfo_max_freq"))
+        n = len(read(os.path.join(policy, "related_cpus")).split())
+        if mx <= 0 or n <= 0:
+            continue
+        weighted += (cur / mx) * n
+        cores += n
+    return (weighted / cores) if cores else 1.0
+
+
+def gpu_load() -> float:
+    cur = read_int(os.path.join(GPU_DEVFREQ, "cur_freq"))
+    mx = read_int(os.path.join(GPU_DEVFREQ, "max_freq"))
+    mn = read_int(os.path.join(GPU_DEVFREQ, "min_freq"))
+    if mx <= mn:
+        return 0.0
+    return max(0.0, min(1.0, (cur - mn) / (mx - mn)))
+
+
+def estimate_watts(busy: float, freq_ratio: float, gpu: float) -> float:
+    busy = max(0.0, min(1.0, busy))
+    freq_ratio = max(0.15, min(1.0, freq_ratio))
+    gpu = max(0.0, min(1.0, gpu))
+    cpu = CPU_PEAK_W * busy * (freq_ratio ** 2)
+    return IDLE_W + cpu + GPU_PEAK_W * gpu
+
+
+def cord_plugged(status: str) -> bool:
+    usb = read(os.path.join(PS, "qcom-battmgr-usb", "online")) == "1"
+    ac = read(os.path.join(PS, "qcom-battmgr-ac", "online")) == "1"
+    if usb or ac:
+        return True
+    if status == "Discharging":
+        return False
+    for supply in glob.glob(os.path.join(PS, "ucsi-source-psy-*")):
+        if read(os.path.join(supply, "online")) == "1":
+            return True
+    return False
+
+
+def emit(live_w: float, battery_uw: int, energy_uwh: int, plugged: bool, status: str) -> None:
+    print(f"live_uw {max(0, int(live_w * 1_000_000))}")
+    print(f"battery_uw {battery_uw}")
+    print(f"battery_uwh {energy_uwh}")
+    print(f"cord_online {1 if plugged else 0}")
+    print(f"battery_status {status}")
+    sys.stdout.flush()
+
+
+def main() -> None:
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+
+    battery = os.path.join(PS, "qcom-battmgr-bat")
+    prev_total, prev_idle = cpu_times()
+    shown = None
+    scale = 1.0
+    last_fw = None
+    calibrated = False
+
+    while True:
+        time.sleep(POLL_S)
+        total, idle = cpu_times()
+        dt = total - prev_total
+        di = idle - prev_idle
+        prev_total, prev_idle = total, idle
+        busy = 0.0 if dt <= 0 else max(0.0, min(1.0, 1.0 - (di / dt)))
+
+        battery_uw = abs(read_int(os.path.join(battery, "power_now")))
+        energy_uwh = read_int(os.path.join(battery, "energy_now"))
+        status = read(os.path.join(battery, "status")) or "Unknown"
+        plugged = cord_plugged(status)
+        fw_w = battery_uw / 1_000_000
+        est_w = estimate_watts(busy, cpu_freq_ratio(), gpu_load())
+
+        # Only trust the pack gauge while it is discharging and only lock
+        # the scale when that reading actually changes. Recalibrating every
+        # sample to a stuck 5.8 W would freeze the live number again.
+        if status == "Discharging" and fw_w >= 0.5 and est_w >= 0.8:
+            if not calibrated:
+                scale = max(0.35, min(2.8, fw_w / est_w))
+                last_fw = fw_w
+                calibrated = True
+            elif last_fw is not None and abs(fw_w - last_fw) >= 0.3:
+                scale = max(0.35, min(2.8, fw_w / est_w))
+                last_fw = fw_w
+
+        live = est_w * scale
+        if status == "Charging" and fw_w >= 0.5:
+            live += fw_w
+        if shown is None:
+            shown = live
+        else:
+            shown = 0.7 * live + 0.3 * shown
+
+        emit(shown, battery_uw, energy_uwh, plugged, status)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
