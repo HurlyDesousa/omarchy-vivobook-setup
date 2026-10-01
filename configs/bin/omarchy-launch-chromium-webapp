@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Launch a URL as a Chromium --app window (ignore xdg default-web-browser).
+# Stock omarchy-launch-webapp follows Brave/Chrome/Opera/Vivaldi/Helium when
+# that browser is the xdg default; this helper always uses Chromium.
+set -euo pipefail
+
+usage() {
+  printf 'Usage: omarchy-launch-chromium-webapp [--status|--dry-run] <url> [chromium-args...]\n' >&2
+  exit 2
+}
+
+webapp_browser_from_xdg() {
+  local browser
+  browser="$(xdg-settings get default-web-browser 2>/dev/null || true)"
+  case ${browser} in
+    google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*)
+      printf '%s\n' "${browser}"
+      ;;
+    *)
+      printf 'chromium.desktop\n'
+      ;;
+  esac
+}
+
+resolve_chromium() {
+  local desktop path exec_bin
+  for desktop in chromium.desktop chromium-browser.desktop; do
+    for path in \
+      "${HOME}/.local/share/applications/${desktop}" \
+      "${HOME}/.nix-profile/share/applications/${desktop}" \
+      "/usr/share/applications/${desktop}"; do
+      [[ -f "${path}" ]] || continue
+      exec_bin="$(awk '/^Exec=/ { sub(/^Exec=/, ""); sub(/ .*/, ""); print; exit }' "${path}")"
+      if [[ -n "${exec_bin}" ]]; then
+        printf '%s\n' "${exec_bin}"
+        return 0
+      fi
+    done
+  done
+  for exec_bin in /usr/bin/chromium /usr/bin/chromium-browser; do
+    if [[ -x "${exec_bin}" ]]; then
+      printf '%s\n' "${exec_bin}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+print_status() {
+  local xdg chromium webapp
+  xdg="$(xdg-settings get default-web-browser 2>/dev/null || printf '(unset)')"
+  webapp="$(webapp_browser_from_xdg)"
+  chromium="$(resolve_chromium 2>/dev/null || printf '(chromium not found)')"
+  printf 'xdg default-web-browser: %s\n' "${xdg}"
+  printf 'omarchy-launch-webapp would use: %s\n' "${webapp}"
+  printf 'SUPER+SHIFT+Y YouTube uses: chromium (%s)\n' "${chromium}"
+}
+
+mode=""
+if [[ "${1:-}" == "--status" || "${1:-}" == "--dry-run" ]]; then
+  mode="$1"
+  shift
+fi
+
+if [[ "${mode}" == "--status" ]]; then
+  print_status
+  exit 0
+fi
+
+[[ -n "${1:-}" ]] || usage
+
+chromium_bin="$(resolve_chromium)" || {
+  printf 'omarchy-launch-chromium-webapp: Chromium not found\n' >&2
+  exit 1
+}
+
+if [[ "${mode}" == "--dry-run" ]]; then
+  printf '%s --app=%s' "${chromium_bin}" "$1"
+  if [[ "$#" -gt 1 ]]; then
+    printf ' %s' "${@:2}"
+  fi
+  printf '\n'
+  exit 0
+fi
+
+if command -v uwsm-app >/dev/null 2>&1; then
+  exec setsid uwsm-app -- "${chromium_bin}" --app="$1" "${@:2}"
+fi
+exec setsid "${chromium_bin}" --app="$1" "${@:2}"

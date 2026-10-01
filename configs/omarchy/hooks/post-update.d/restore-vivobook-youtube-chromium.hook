@@ -1,0 +1,38 @@
+#!/bin/bash
+# Omarchy post-update hook: SUPER+SHIFT+Y YouTube → Chromium --app.
+set -euo pipefail
+
+for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
+               "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
+  [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
+    source "${_vb_lib}"; vivobook_ensure_user_home; break; }
+done
+[[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
+
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+CONFIGS="${REPO_ROOT}/configs"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/upsert-marked-block.sh"
+
+HELPER_SRC="${CONFIGS}/bin/omarchy-launch-chromium-webapp"
+HELPER_DEST="${HOME}/.local/bin/omarchy-launch-chromium-webapp"
+BIND_SRC="${CONFIGS}/hypr/bindings.lua.fragment"
+BIND_DEST="${HOME}/.config/hypr/bindings.lua"
+OMARCHY_BIN="/usr/share/omarchy/bin"
+
+if [[ -f "${HELPER_SRC}" ]]; then
+  mkdir -p "$(dirname "${HELPER_DEST}")"
+  cp "${HELPER_SRC}" "${HELPER_DEST}"
+  chmod +x "${HELPER_DEST}"
+  if [[ -d "${OMARCHY_BIN}" ]]; then
+    if [[ -w "${OMARCHY_BIN}" ]]; then
+      ln -sfn "${HELPER_DEST}" "${OMARCHY_BIN}/omarchy-launch-chromium-webapp" || true
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo ln -sfn "${HELPER_DEST}" "${OMARCHY_BIN}/omarchy-launch-chromium-webapp" || true
+    fi
+  fi
+fi
+
+if [[ -f "${BIND_SRC}" ]]; then
+  upsert_marked_block "${BIND_DEST}" "${BIND_SRC}"
+fi

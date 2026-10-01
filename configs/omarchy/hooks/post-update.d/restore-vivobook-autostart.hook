@@ -82,3 +82,8 @@ if declare -F ensure_hypr_tm_block >/dev/null 2>&1; then
 elif [[ -f "${HYPR_DEST}" ]] && ! grep -q 'omarchy-task-manager begin' "${HYPR_DEST}" 2>/dev/null; then
   echo "restore-vivobook-autostart: WARNING missing omarchy-task-manager block in ${HYPR_DEST}" >&2
 fi
+
+YT_HOOK="$(cd "$(dirname "$0")" && pwd)/restore-vivobook-youtube-chromium.hook"
+if [[ -x "${YT_HOOK}" ]]; then
+  "${YT_HOOK}" || true
+fi

@@ -24,6 +24,13 @@ Do **not** vendor binaries into this repo. Re-fetch / reinstall from these sourc
 - Wi-Fi settle: top-level `delay_seconds` (default **10**) — Hypr block waits that long after login before launching apps (`hl.timer` oneshot, `timeout = delay_seconds * 1000`). Set `0` or omit for immediate launch.
 - Post-update: `restore-vivobook-autostart.hook`
 
+## YouTube shortcut (`SUPER + SHIFT + Y`)
+- Stock Omarchy: `o.bind("SUPER + SHIFT + Y", "YouTube", { webapp = "https://youtube.com/" })` → `omarchy-launch-webapp`, which uses the xdg default when it is Brave/Chrome/Edge/Opera/Vivaldi/Helium.
+- LIVE webapp browser is **Brave** (`brave-web.whatsapp.com__-Default`, `brave-www.tradingview.com__chart_-Default`).
+- Restore override: `o.rebind` in `configs/hypr/bindings.lua.fragment` + `configs/bin/omarchy-launch-chromium-webapp` so this shortcut always opens YouTube in Chromium `--app`.
+- Status: `omarchy-launch-chromium-webapp --status`
+- Post-update: `restore-vivobook-youtube-chromium.hook`
+
 ## Cursor IDE (AppImage — exclude binary from tarball)
 - Live: `~/.local/opt/cursor/Cursor-3.19.13-aarch64.AppImage` (~282M) → symlink `~/.local/bin/cursor`
 - Prefer Cursor download API / official aarch64 AppImage for Linux ARM64 rather than copying the AppImage
