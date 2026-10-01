@@ -1,5 +1,7 @@
 #!/bin/bash
-# Omarchy post-update hook: re-apply Vivobook power panel QML polish overlay.
+# Omarchy post-update hook: restore the Vivobook hurly.power panel clone.
+# Live UI is the user plugin (CPU/GPU live watts + cord/battery labels).
+# Do not write /usr/share/omarchy — stock omarchy.power stays packaged.
 set -euo pipefail
 
 for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
@@ -10,25 +12,14 @@ done
 [[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
 
 REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
-OVERLAY="${REPO_ROOT}/configs/omarchy/overlays/panels/power"
-TARGET="/usr/share/omarchy/shell/plugins/panels/power"
+PLUGIN_SRC="${REPO_ROOT}/configs/omarchy/plugins/hurly.power"
+PLUGIN_DEST="${HOME}/.config/omarchy/plugins/hurly.power"
 
-[[ -d "${OVERLAY}" ]] || exit 0
+[[ -d "${PLUGIN_SRC}" ]] || exit 0
 
-copy_overlay() {
-  local src="$1"
-  local dest="$2"
-  if [[ -w "${TARGET}" ]]; then
-    cp "${src}" "${dest}"
-  elif command -v sudo >/dev/null 2>&1; then
-    sudo cp "${src}" "${dest}"
-  else
-    echo "restore-vivobook-power-panel.hook: cannot write ${dest} — run with sudo" >&2
-    return 1
-  fi
-}
-
-for f in Panel.qml Model.js; do
-  [[ -f "${OVERLAY}/${f}" ]] || continue
-  copy_overlay "${OVERLAY}/${f}" "${TARGET}/${f}" || exit 1
+mkdir -p "${PLUGIN_DEST}"
+for f in Panel.qml Model.js manifest.json read-draw; do
+  [[ -f "${PLUGIN_SRC}/${f}" ]] || continue
+  cp "${PLUGIN_SRC}/${f}" "${PLUGIN_DEST}/${f}"
 done
+chmod +x "${PLUGIN_DEST}/read-draw" 2>/dev/null || true
