@@ -1,18 +1,28 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "../Host.js" as Host
 
 BarIndicator {
   id: root
 
-  readonly property var kbd: {
-    var sh = bar && bar.shell ? bar.shell : null
-    if (!sh) return null
-    var services = sh._services || {}
-    return services["sw.art.kbd-backlight"] || null
-  }
+  readonly property var kbd: Host.serviceFromBar(bar, ["sw.art.kbd-backlight"])
+  property bool fileEnabled: false
+  property string fileBaseHex: "#ffffff"
+  property string fileActualHex: "#000000"
+  property int fileBrightness: 100
+  property bool fileAutostart: true
+  property bool fileAutoOff: true
+  readonly property bool kbdOn: kbd ? kbd.backlightOn : fileEnabled
+  readonly property string kbdBase: kbd ? kbd.baseHex : fileBaseHex
+  readonly property string kbdActual: kbd ? kbd.actualHex : fileActualHex
+  readonly property int kbdBright: kbd ? kbd.brightness : fileBrightness
+  readonly property bool kbdAutostart: kbd ? kbd.autostart : fileAutostart
+  readonly property bool kbdAutoOff: kbd ? kbd.autoOff : fileAutoOff
 
   property bool optionsOpen: false
   property bool showSettings: false
@@ -20,7 +30,9 @@ BarIndicator {
   readonly property int defaultDimSeconds: 180
   readonly property var idleConfig: {
     var sh = bar && bar.shell ? bar.shell : null
-    return sh && sh.shellConfig && sh.shellConfig.idle ? sh.shellConfig.idle : ({})
+    if (sh && sh.shellConfig && sh.shellConfig.idle) return sh.shellConfig.idle
+    if (sh && sh.idleConfig) return sh.idleConfig
+    return ({})
   }
   readonly property int dimTimeoutSeconds: {
     var n = Number(idleConfig.dim)
@@ -28,7 +40,7 @@ BarIndicator {
     return defaultDimSeconds
   }
 
-  active: kbd ? kbd.backlightOn : false
+  active: kbdOn
   activeText: "󰌌"
   inactiveText: "󰌌"
   activeTooltipText: "Keyboard backlight on"
@@ -41,8 +53,66 @@ BarIndicator {
     return s + "s"
   }
 
+  function hostIpc(parts) {
+    Quickshell.execDetached(Host.ipc(parts))
+  }
+
+  function applyFileState(raw) {
+    try {
+      var d = JSON.parse(String(raw || "{}"))
+      if (!d || typeof d !== "object") return
+      if (typeof d.enabled === "boolean") root.fileEnabled = d.enabled
+      if (typeof d.brightness === "number")
+        root.fileBrightness = Math.max(0, Math.min(100, Math.round(d.brightness)))
+      if (d._base) root.fileBaseHex = String(d._base)
+      else if (d.hex) root.fileBaseHex = String(d.hex)
+      if (d.hex) root.fileActualHex = String(d.hex)
+      if (typeof d.autostart === "boolean") root.fileAutostart = d.autostart
+      if (typeof d.auto_off === "boolean") root.fileAutoOff = d.auto_off
+    } catch (e) {}
+  }
+
   function toggle() {
     if (root.kbd) root.kbd.toggle()
+    else root.hostIpc(["kbd-backlight", "toggle"])
+  }
+
+  function setHex(value) {
+    if (root.kbd) root.kbd.setBaseHex(value)
+    else root.hostIpc(["kbd-backlight", "setHex", value])
+  }
+
+  function setBright(value) {
+    if (root.kbd) root.kbd.setBrightness(value)
+    else {
+      root.fileBrightness = Math.max(0, Math.min(100, Math.round(value)))
+      brightIpcTimer.restart()
+    }
+  }
+
+  function setAutostartValue(value) {
+    if (root.kbd) root.kbd.setAutostart(value)
+    else root.hostIpc(["kbd-backlight", "setAutostart", value ? "on" : "off"])
+  }
+
+  function setAutoOffValue(value) {
+    if (root.kbd) root.kbd.setAutoOff(value)
+    else root.hostIpc(["kbd-backlight", "setAutoOff", value ? "on" : "off"])
+  }
+
+  FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/kbd-backlight"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.applyFileState(text())
+    onFileChanged: reload()
+  }
+
+  Timer {
+    id: brightIpcTimer
+    interval: 120
+    repeat: false
+    onTriggered: root.hostIpc(["kbd-backlight", "setBrightness", String(root.fileBrightness)])
   }
 
   function openOptions() {
@@ -112,7 +182,7 @@ BarIndicator {
             }
 
             ToggleSwitch {
-              checked: root.kbd ? root.kbd.backlightOn : false
+              checked: root.kbdOn
               foreground: root.bar.foreground
               onToggled: root.toggle()
             }
@@ -171,14 +241,14 @@ BarIndicator {
                 radius: Style.cornerRadius
                 color: swatch
                 border.width: 2
-                border.color: (root.kbd && root.kbd.baseHex.toLowerCase() === swatch)
+                border.color: (root.kbdBase.toLowerCase() === swatch)
                   ? root.bar.foreground : "transparent"
 
                 MouseArea {
                   anchors.fill: parent
                   hoverEnabled: true
                   cursorShape: Qt.PointingHandCursor
-                  onClicked: if (root.kbd) root.kbd.setBaseHex(swatch)
+                  onClicked: root.setHex(swatch)
                 }
               }
             }
@@ -198,7 +268,7 @@ BarIndicator {
             Slider {
               id: brightSlider
               from: 0; to: 100; stepSize: 1
-              value: root.kbd ? root.kbd.brightness : 100
+              value: root.kbdBright
               Layout.fillWidth: true
 
               handle: Rectangle {
@@ -233,11 +303,11 @@ BarIndicator {
                 }
               }
 
-              onMoved: if (root.kbd) root.kbd.setBrightness(value)
+              onMoved: root.setBright(value)
             }
 
             Label {
-              text: (root.kbd ? root.kbd.brightness : 0) + "%"
+              text: root.kbdBright + "%"
               color: root.bar.foreground
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.bodySmall
@@ -275,7 +345,7 @@ BarIndicator {
 
             TextField {
               id: hexInput
-              text: root.kbd ? root.kbd.baseHex : "#ffffff"
+              text: root.kbdBase
               font.family: "monospace"
               font.pixelSize: Style.font.bodySmall
               color: root.bar.foreground
@@ -291,18 +361,16 @@ BarIndicator {
                 border.width: 1
               }
               onEditingFinished: {
-                if (!root.kbd) return
-                var v = root.kbd.normaliseHex(text)
-                if (!v) { text = root.kbd.baseHex; return }
-                root.kbd.setBaseHex(v)
-                text = v
+                var v = String(text || "").trim().toLowerCase()
+                if (/^#[0-9a-f]{6}$/.test(v)) root.setHex(v)
+                else if (/^#[0-9a-f]{3}$/.test(v))
+                  root.setHex("#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3])
+                else text = root.kbdBase
               }
               Connections {
-                target: root.kbd
-                enabled: root.kbd !== null
-                ignoreUnknownSignals: true
-                function onBaseHexChanged() {
-                  if (!hexInput.activeFocus && root.kbd) hexInput.text = root.kbd.baseHex
+                target: root
+                function onKbdBaseChanged() {
+                  if (!hexInput.activeFocus) hexInput.text = root.kbdBase
                 }
               }
             }
@@ -310,7 +378,7 @@ BarIndicator {
             Rectangle {
               width: Style.space(22); height: Style.space(22)
               radius: Style.cornerRadius
-              color: root.kbd ? root.kbd.actualHex : "#000000"
+              color: root.kbdActual
               border.color: Color.popups.border
               border.width: 1
             }
@@ -335,20 +403,20 @@ BarIndicator {
             width: parent.width
             label: "Autostart"
             description: "Restore on session"
-            checked: root.kbd ? root.kbd.autostart : true
+            checked: root.kbdAutostart
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
-            onClicked: if (root.kbd) root.kbd.setAutostart(!root.kbd.autostart)
+            onClicked: root.setAutostartValue(!root.kbdAutostart)
           }
 
           Toggle {
             width: parent.width
             label: "Auto-off on idle"
             description: "Follows display auto-dim (" + root.formatDimTimeout(root.dimTimeoutSeconds) + ")"
-            checked: root.kbd ? root.kbd.autoOff : true
+            checked: root.kbdAutoOff
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
-            onClicked: if (root.kbd) root.kbd.setAutoOff(!root.kbd.autoOff)
+            onClicked: root.setAutoOffValue(!root.kbdAutoOff)
           }
         }
       }

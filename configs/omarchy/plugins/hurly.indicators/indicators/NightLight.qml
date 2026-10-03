@@ -3,13 +3,14 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "../Host.js" as Host
 
 // Stock Omarchy NightLight indicator with Vivobook right-click auto panel.
 // Left-click path is unchanged from upstream; right-click is a separate overlay.
 BarIndicator {
   id: root
 
-  readonly property var nightlightService: bar?.shell?.firstPartyServiceFor("omarchy.nightlight")
+  readonly property var nightlightService: Host.serviceFromBar(bar, ["omarchy.nightlight"])
 
     property bool autoEnabled: false
     property string statusText: ""
@@ -79,7 +80,7 @@ BarIndicator {
             root.nightlightService.noteManualOverride(turningOn)
             root.nightlightService.applyTemperature(turningOn ? root.nightKelvin() : 6500)
         } else {
-            Quickshell.execDetached([root.autoBin, turningOn ? "now-on" : "now-off"])
+            Quickshell.execDetached(Host.ipc(["nightlight", "toggle"]))
         }
         root.readHyprTemp()
     }
