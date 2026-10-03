@@ -1,19 +1,16 @@
 import QtQuick
+import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "../Host.js" as Host
 
 BarIndicator {
   id: root
 
-  readonly property var idleService: {
-    var sh = bar && bar.shell ? bar.shell : null
-    if (!sh) return null
-    var services = sh._services || {}
-    var resolved = "omarchy.idle"
-    if (sh.pluginRegistry && typeof sh.pluginRegistry.resolveEnabledId === "function")
-      resolved = sh.pluginRegistry.resolveEnabledId("omarchy.idle") || resolved
-    return services[resolved] || services["hurly.idle"] || services["omarchy.idle"] || null
-  }
+  readonly property var idleService: Host.serviceFromBar(bar, ["hurly.idle", "omarchy.idle"])
+  property bool fileStayAwake: false
+  readonly property bool stayAwakeOn: idleService ? idleService.stayAwake : fileStayAwake
 
   property bool optionsOpen: false
   readonly property bool popoutSwitchClosing: false
@@ -24,7 +21,7 @@ BarIndicator {
   readonly property color accent: Color.accent
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
-  active: idleService ? idleService.stayAwake : false
+  active: stayAwakeOn
   activeText: "󰅶"
   inactiveText: "󰅶"
   activeTooltipText: "Stay awake is on — click to allow lock"
@@ -59,7 +56,8 @@ BarIndicator {
   }
 
   function toggle() {
-    if (root.idleService) root.idleService.setIdleEnabled(root.active)
+    if (root.idleService) root.idleService.setIdleEnabled(root.stayAwakeOn)
+    else Quickshell.execDetached(Host.ipc(["idle", "toggle"]))
   }
 
   function openOptions() {
@@ -80,6 +78,15 @@ BarIndicator {
   }
 
   onPressed: function() { root.toggle() }
+
+  FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/indicators/stay-awake"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.fileStayAwake = true
+    onLoadFailed: root.fileStayAwake = false
+    onFileChanged: reload()
+  }
 
   Component.onCompleted: syncFromService()
 

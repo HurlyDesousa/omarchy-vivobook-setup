@@ -14,6 +14,8 @@ Item {
   property bool autoOff: true
   property bool applyingFromFile: false
   property bool started: false
+  property bool applyPending: false
+  property string lastWritten: ""
 
   readonly property bool backlightOn: kbdEnabled && brightness > 0
   readonly property string actualHex: {
@@ -52,19 +54,31 @@ Item {
       root.loadFromText(text())
       if (!root.started) {
         root.started = true
-        if (root.autostart) root._doApply()
+        if (root.autostart) root._doApply(true)
       }
     }
     onFileChanged: reload()
   }
 
-  Component.onCompleted: {
-    if (!stateFile.running) stateFile.reload()
+  Component.onCompleted: stateFile.reload()
+
+  // One EC write at a time; a newer colour waits for the running one.
+  Process {
+    id: applyProc
+    onExited: function(exitCode) {
+      if (exitCode !== 0) console.warn("kbd-backlight: x1e-ec-tool kb exited " + exitCode)
+      if (root.applyPending) {
+        root.applyPending = false
+        root._doApply(false)
+      }
+    }
   }
 
   function loadFromText(raw) {
     var l = String(raw || "").trim()
     if (!l || l === "{}") return
+    // Our own save echoing back can be older than the slider by now.
+    if (l === root.lastWritten) return
     try {
       applyStateFromDisk(JSON.parse(l), false)
     } catch (e) {}
@@ -89,28 +103,39 @@ Item {
     if (applyEc && root.autostart) root._doApply()
   }
 
-  function _doApply() {
+  // onLoad: a plugin reload while the idle dim holds the keyboard dark must
+  // not relight it; omarchy-idle-dim keeps its state file only while dimmed.
+  function _doApply(onLoad) {
+    if (applyProc.running) {
+      root.applyPending = true
+      return
+    }
     var hex = actualHex
-    Quickshell.execDetached(["bash", "-c",
-      "ec=/usr/local/bin/x1e-ec-tool;" +
-      " \"$ec\" kb '" + hex + "' 2>/dev/null ||" +
-      " sudo -n \"$ec\" kb '" + hex + "' 2>/dev/null || true"])
+    if (!/^#[0-9a-f]{6}$/.test(hex)) return
+    applyProc.command = onLoad
+      ? ["bash", "-c", "[[ -e ${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-idle-dim.state ]] && exit 0; " +
+          "exec timeout 3 /usr/local/bin/x1e-ec-tool kb \"$1\"", "bash", hex]
+      : ["timeout", "3", "/usr/local/bin/x1e-ec-tool", "kb", hex]
+    applyProc.running = true
   }
 
   function _doSave() {
     var en = kbdEnabled && brightness > 0
-    var payload = '{"hex":"' + actualHex + '"' +
-      ',"enabled":' + (en ? "true" : "false") +
-      ',"_base":"' + baseHex.toLowerCase() + '"' +
-      ',"brightness":' + brightness +
-      ',"autostart":' + (autostart ? "true" : "false") +
-      ',"auto_off":' + (autoOff ? "true" : "false") + '}'
+    var payload = JSON.stringify({
+      hex: actualHex,
+      enabled: en,
+      _base: baseHex.toLowerCase(),
+      brightness: brightness,
+      autostart: autostart,
+      auto_off: autoOff
+    })
+    root.lastWritten = payload
     Quickshell.execDetached(["bash", "-c",
       "d=\"$HOME/.local/state/omarchy\";" +
       " mkdir -p \"$d\" &&" +
       " t=$(mktemp \"$d/kbd-backlight.XXXXXX\") &&" +
-      " printf '%s\\n' '" + payload + "' > \"$t\" &&" +
-      " mv \"$t\" \"$d/kbd-backlight\""])
+      " printf '%s\\n' \"$1\" > \"$t\" &&" +
+      " mv \"$t\" \"$d/kbd-backlight\"", "bash", payload])
   }
 
   function applyAndSave() {
@@ -122,7 +147,7 @@ Item {
   function persistNow() {
     applyTimer.stop()
     saveTimer.stop()
-    root._doApply()
+    root._doApply(false)
     root._doSave()
   }
 
@@ -138,7 +163,9 @@ Item {
   }
 
   function setBaseHex(value) {
-    root.baseHex = value
+    var hex = normaliseHex(value)
+    if (!hex) return
+    root.baseHex = hex
     root.ensureOn()
     root.applyAndSave()
   }
@@ -177,13 +204,37 @@ Item {
         enabled: root.backlightOn,
         hex: root.actualHex,
         base: root.baseHex,
-        brightness: root.brightness
+        brightness: root.brightness,
+        autostart: root.autostart,
+        auto_off: root.autoOff
       })
     }
 
     function toggle(): string {
       root.toggle()
       return root.backlightOn ? "on" : "off"
+    }
+
+    function setHex(value: string): string {
+      root.setBaseHex(value)
+      return root.actualHex
+    }
+
+    function setBrightness(value: string): string {
+      root.setBrightness(Number(value))
+      return String(root.brightness)
+    }
+
+    function setAutostart(value: string): string {
+      var on = value === "true" || value === "1" || value === "on"
+      root.setAutostart(on)
+      return root.autostart ? "on" : "off"
+    }
+
+    function setAutoOff(value: string): string {
+      var on = value === "true" || value === "1" || value === "on"
+      root.setAutoOff(on)
+      return root.autoOff ? "on" : "off"
     }
   }
 }
