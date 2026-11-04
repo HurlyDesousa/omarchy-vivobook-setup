@@ -1,13 +1,25 @@
 #!/bin/bash
-# User override: drop the terminal screensaver and restore idle dim before
-# the stock lid-close lock. Closing the lid must wake to the login screen,
-# not ttfx.
+# omarchy-system-lid-close v4 — lock, then sleep when the lid closes.
+#
+# Hyprland binds "Lid Switch", but this Vivobook's switch device is
+# gpio-keys, so that bind never fires. logind does see the lid, then
+# ignores it while HDMI is attached (HandleLidSwitchDocked=ignore).
+# This handler is invoked from a logind LidClosed watcher (and from
+# a gpio-keys bind if Hyprland delivers it).
 
 set -euo pipefail
 
-"${HOME}/.local/bin/omarchy-idle-dim" restore >/dev/null 2>&1 || true
-pkill -x ttfx 2>/dev/null || true
-timeout 1s pidwait -x ttfx 2>/dev/null || true
-pkill -f '[o]rg.omarchy.screensaver' 2>/dev/null || true
+logger -t omarchy-system-lid-close "lid-close handler started"
 
-exec /usr/bin/omarchy-system-lid-close "$@"
+exec 9>"${XDG_RUNTIME_DIR:-/run/user/${UID:-1000}}/omarchy-lid-sleep.lock"
+flock -n 9 || {
+  logger -t omarchy-system-lid-close "already handling lid close"
+  exit 0
+}
+
+timeout 2s "${HOME}/.local/bin/omarchy-idle-dim" restore >/dev/null 2>&1 || true
+timeout 3s omarchy-system-lock >/dev/null 2>&1 || true
+timeout 2s /usr/bin/omarchy-system-lid-close "$@" || true
+
+logger -t omarchy-system-lid-close "suspending"
+exec systemctl suspend

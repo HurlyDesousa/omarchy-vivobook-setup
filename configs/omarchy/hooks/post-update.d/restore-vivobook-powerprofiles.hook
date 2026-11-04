@@ -1,51 +1,111 @@
 #!/bin/bash
+# Install Vivobook powerprofiles helpers as root-owned system copies, then
+# point /usr/share/omarchy/bin overlays at those — never at ~/.local/lib.
+# systemd/udev run autodetect as root; it must not exec user-writable scripts.
 set -euo pipefail
 
-for _vb_lib in "${HOME}/.local/lib/omarchy-vivobook/user-home.sh" \
+for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
                "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
   [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
     source "${_vb_lib}"; vivobook_ensure_user_home; break; }
 done
+[[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
 
-SAFE_APPLY=""
-for candidate in \
-  "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/safe-apply.sh}" \
-  "${HOME}/src/omarchy-vivobook-setup/scripts/lib/safe-apply.sh"; do
-  [[ -n "${candidate}" && -f "${candidate}" ]] && { SAFE_APPLY="${candidate}"; break; }
-done
-[[ -n "${SAFE_APPLY}" ]] && { # shellcheck source=/dev/null
-  source "${SAFE_APPLY}"; }
-
-LIB="${HOME}/.local/lib/omarchy-vivobook"
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+USER_LIB="${HOME}/.local/lib/omarchy-vivobook"
+SYS_LIB=/usr/local/lib/omarchy-vivobook
 SHARE_BIN=/usr/share/omarchy/bin
-[[ -x "${LIB}/omarchy-powerprofiles-list" && -x "${LIB}/omarchy-powerprofiles-set" ]] || exit 0
+CFG_LIB="${REPO_ROOT}/configs/lib/omarchy-vivobook"
 
-if declare -F safe_overlay_symlink >/dev/null 2>&1; then
-  safe_overlay_symlink "${LIB}/omarchy-powerprofiles-list" "${SHARE_BIN}/omarchy-powerprofiles-list" \
-    "overlay omarchy-powerprofiles-list"
-  safe_overlay_symlink "${LIB}/omarchy-powerprofiles-set" "${SHARE_BIN}/omarchy-powerprofiles-set" \
-    "overlay omarchy-powerprofiles-set"
-  if [[ -x "${LIB}/omarchy-battery-status" ]]; then
-    safe_overlay_symlink "${LIB}/omarchy-battery-status" "${SHARE_BIN}/omarchy-battery-status" \
-      "overlay omarchy-battery-status"
+src_for() {
+  local name="$1"
+  if [[ -f "${CFG_LIB}/${name}" ]]; then
+    printf '%s\n' "${CFG_LIB}/${name}"
+  elif [[ -f "${USER_LIB}/${name}" ]]; then
+    printf '%s\n' "${USER_LIB}/${name}"
   fi
-else
-  for pair in \
-    "${LIB}/omarchy-powerprofiles-list:${SHARE_BIN}/omarchy-powerprofiles-list" \
-    "${LIB}/omarchy-powerprofiles-set:${SHARE_BIN}/omarchy-powerprofiles-set" \
-    "${LIB}/omarchy-battery-status:${SHARE_BIN}/omarchy-battery-status"; do
-    src="${pair%%:*}"
-    dest="${pair#*:}"
-    [[ -x "${src}" ]] || continue
-    if [[ -w "${SHARE_BIN}" ]]; then
-      ln -sfn "${src}" "${dest}"
-    elif command -v sudo >/dev/null 2>&1; then
-      sudo ln -sfn "${src}" "${dest}"
-    else
-      echo "restore-vivobook-powerprofiles: cannot write ${dest} — run with sudo" >&2
-      exit 1
-    fi
-  done
+}
+
+install_root_file() {
+  local src="$1" dest="$2" mode="${3:-0755}"
+  [[ -f "${src}" ]] || return 0
+  if [[ -f "${dest}" ]] && cmp -s "${src}" "${dest}"; then
+    local owner
+    owner="$(stat -c '%U:%G' "${dest}" 2>/dev/null || true)"
+    [[ "${owner}" == "root:root" ]] && return 0
+  fi
+  local dest_dir
+  dest_dir="$(dirname "${dest}")"
+  if [[ -w "${dest_dir}" ]]; then
+    install -o root -g root -m "${mode}" "${src}" "${dest}"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo mkdir -p "${dest_dir}"
+    sudo install -o root -g root -m "${mode}" "${src}" "${dest}"
+  else
+    echo "restore-vivobook-powerprofiles: cannot write ${dest} — run with sudo" >&2
+    return 1
+  fi
+}
+
+link_share() {
+  local src="$1" dest="$2"
+  [[ -e "${src}" ]] || return 0
+  local cur
+  cur="$(readlink -f "${dest}" 2>/dev/null || true)"
+  [[ "${cur}" == "$(readlink -f "${src}")" ]] && return 0
+  if [[ -w "${SHARE_BIN}" ]]; then
+    ln -sfn "${src}" "${dest}"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ln -sfn "${src}" "${dest}"
+  fi
+}
+
+mkdir -p "${USER_LIB}"
+
+# Refresh editable user mirrors from inventory (optional).
+for name in omarchy-powerprofiles-list omarchy-powerprofiles-set \
+            omarchy-battery-status omarchy-vivobook-gpu \
+            omarchy-vivobook-powerprofiles-autodetect user-home.sh; do
+  src="$(src_for "${name}" || true)"
+  [[ -n "${src}" && "${src}" != "${USER_LIB}/${name}" ]] || continue
+  if [[ "${name}" == "user-home.sh" ]]; then
+    install -m 0644 "${src}" "${USER_LIB}/${name}"
+  else
+    install -m 0755 "${src}" "${USER_LIB}/${name}"
+  fi
+done
+
+[[ -x "${USER_LIB}/omarchy-powerprofiles-list" && -x "${USER_LIB}/omarchy-powerprofiles-set" ]] || exit 0
+
+# Root-owned system inventory (what root/udev actually run).
+if command -v sudo >/dev/null 2>&1 || [[ -w /usr/local/lib ]]; then
+  if [[ -w /usr/local/lib ]]; then
+    mkdir -p "${SYS_LIB}"
+  else
+    sudo mkdir -p "${SYS_LIB}"
+  fi
+fi
+
+for name in omarchy-powerprofiles-list omarchy-powerprofiles-set \
+            omarchy-battery-status user-home.sh; do
+  src="$(src_for "${name}" || true)"
+  [[ -n "${src}" ]] || continue
+  mode=0755
+  [[ "${name}" == "user-home.sh" ]] && mode=0644
+  install_root_file "${src}" "${SYS_LIB}/${name}" "${mode}" || true
+done
+
+# GPU helper + autodetect stay on PATH under /usr/local/bin.
+gpu_src="$(src_for omarchy-vivobook-gpu || true)"
+[[ -n "${gpu_src}" ]] && install_root_file "${gpu_src}" /usr/local/bin/omarchy-vivobook-gpu 0755 || true
+auto_src="$(src_for omarchy-vivobook-powerprofiles-autodetect || true)"
+[[ -n "${auto_src}" ]] && install_root_file "${auto_src}" /usr/local/bin/omarchy-vivobook-powerprofiles-autodetect 0755 || true
+
+# Point Omarchy bin overlays at the system inventory (not ~/.local/lib).
+link_share "${SYS_LIB}/omarchy-powerprofiles-list" "${SHARE_BIN}/omarchy-powerprofiles-list"
+link_share "${SYS_LIB}/omarchy-powerprofiles-set" "${SHARE_BIN}/omarchy-powerprofiles-set"
+if [[ -e "${SYS_LIB}/omarchy-battery-status" ]]; then
+  link_share "${SYS_LIB}/omarchy-battery-status" "${SHARE_BIN}/omarchy-battery-status"
 fi
 
 if [[ ! -f /etc/udev/rules.d/99-omarchy-vivobook-powerprofiles.rules ]]; then

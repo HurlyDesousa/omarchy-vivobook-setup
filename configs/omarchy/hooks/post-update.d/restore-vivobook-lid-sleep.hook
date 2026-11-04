@@ -1,0 +1,57 @@
+#!/bin/bash
+# Reinstall lid-close sleep: wrapper, logind watcher, gpio-keys Hyprland bind.
+set -euo pipefail
+
+for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
+               "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
+  [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
+    source "${_vb_lib}"; vivobook_ensure_user_home; break; }
+done
+[[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
+
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+BIN="${HOME}/.local/bin"
+UNIT_DIR="${HOME}/.config/systemd/user"
+BINDINGS="${HOME}/.config/hypr/bindings.lua"
+
+mkdir -p "${BIN}" "${UNIT_DIR}" "$(dirname "${BINDINGS}")"
+
+if [[ -f "${REPO_ROOT}/configs/bin/omarchy-system-lid-close" ]]; then
+  install -m 0755 "${REPO_ROOT}/configs/bin/omarchy-system-lid-close" "${BIN}/omarchy-system-lid-close"
+fi
+if [[ -f "${REPO_ROOT}/configs/bin/omarchy-lid-sleep-watch" ]]; then
+  install -m 0755 "${REPO_ROOT}/configs/bin/omarchy-lid-sleep-watch" "${BIN}/omarchy-lid-sleep-watch"
+fi
+if [[ -f "${REPO_ROOT}/configs/systemd/user/omarchy-lid-sleep-watch.service" ]]; then
+  install -m 0644 "${REPO_ROOT}/configs/systemd/user/omarchy-lid-sleep-watch.service" \
+    "${UNIT_DIR}/omarchy-lid-sleep-watch.service"
+fi
+
+if [[ -f "${BINDINGS}" ]] && ! grep -q 'switch:on:gpio-keys' "${BINDINGS}"; then
+  python3 - <<'PY' "${BINDINGS}"
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+text = p.read_text()
+needle = '''-- Lid close: this board's switch is gpio-keys, not "Lid Switch".
+hl.unbind("switch:on:Lid Switch")
+hl.unbind("switch:off:Lid Switch")
+o.bind("switch:on:gpio-keys", nil, "/home/hurly/.local/bin/omarchy-system-lid-close", { locked = true })
+o.bind("switch:off:gpio-keys", nil, "omarchy-hyprland-monitor-clamshell", { locked = true })
+'''
+old = '''hl.unbind("switch:on:Lid Switch")
+o.bind("switch:on:Lid Switch", nil, "/home/hurly/.local/bin/omarchy-system-lid-close", { locked = true })'''
+if "switch:on:gpio-keys" in text:
+    raise SystemExit(0)
+if old in text:
+    text = text.replace(old, needle.rstrip() + "\n")
+else:
+    text = text.rstrip() + "\n\n" + needle
+p.write_text(text)
+PY
+fi
+
+if command -v systemctl >/dev/null && [[ "${EUID}" -ne 0 ]]; then
+  systemctl --user daemon-reload >/dev/null 2>&1 || true
+  systemctl --user enable --now omarchy-lid-sleep-watch.service >/dev/null 2>&1 || true
+fi

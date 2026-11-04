@@ -69,15 +69,22 @@ pin_cpu_governor() {
 apply_gpu_policy() {
   local helper=""
   local h
-  for h in /usr/local/bin/omarchy-vivobook-gpu \
-           /home/hurly/.local/lib/omarchy-vivobook/omarchy-vivobook-gpu; do
+  # Prefer the root-owned helper. Only fall back to the user copy when not root
+  # (interactive edits); root/udev must never exec a user-writable path.
+  for h in /usr/local/bin/omarchy-vivobook-gpu; do
     [[ -x $h ]] && helper=$h && break
   done
+  if [[ -z $helper && ${EUID} -ne 0 ]]; then
+    for h in "${HOME}/.local/lib/omarchy-vivobook/omarchy-vivobook-gpu" \
+             /home/hurly/.local/lib/omarchy-vivobook/omarchy-vivobook-gpu; do
+      [[ -x $h ]] && helper=$h && break
+    done
+  fi
   [[ -n $helper ]] || return 0
   if "$helper" 2>/dev/null; then
     return 0
   fi
-  if command -v sudo >/dev/null 2>&1; then
+  if [[ ${EUID} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
     sudo -n "$helper" 2>/dev/null && return 0
   fi
   return 0
