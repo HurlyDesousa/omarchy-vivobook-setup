@@ -1,11 +1,13 @@
 #!/bin/bash
-# omarchy-system-lid-close v4 — lock, then sleep when the lid closes.
+# omarchy-system-lid-close v5 — lock securely, then sleep when the lid closes.
 #
 # Hyprland binds "Lid Switch", but this Vivobook's switch device is
 # gpio-keys, so that bind never fires. logind does see the lid, then
 # ignores it while HDMI is attached (HandleLidSwitchDocked=ignore).
 # This handler is invoked from a logind LidClosed watcher (and from
 # a gpio-keys bind if Hyprland delivers it).
+#
+# Never call systemctl suspend until ext-session-lock reports secure.
 
 set -euo pipefail
 
@@ -18,8 +20,47 @@ flock -n 9 || {
 }
 
 timeout 2s "${HOME}/.local/bin/omarchy-idle-dim" restore >/dev/null 2>&1 || true
-timeout 3s omarchy-system-lock >/dev/null 2>&1 || true
-timeout 2s /usr/bin/omarchy-system-lid-close "$@" || true
 
-logger -t omarchy-system-lid-close "suspending"
+# Packaged helper reconciles clamshell/monitors; ignore lock/skip logic there
+# because we always suspend on this machine's lid watcher.
+timeout 2s /usr/bin/omarchy-system-lid-close "$@" >/dev/null 2>&1 || true
+
+lock_secure() {
+  local st
+  st=$(timeout 2s omarchy-shell lock status 2>/dev/null || true)
+  [[ $st == *'"secure":true'* ]]
+}
+
+request_lock() {
+  timeout 3s omarchy-shell lock lock >/dev/null 2>&1 || true
+  timeout 3s omarchy-system-lock >/dev/null 2>&1 || true
+}
+
+# Prefer Omarchy's budgeted sleep-lock (waits for secure). Fall back to a
+# local poll so a stuck soft-lock cannot send us to sleep unlocked.
+sleep_lock="${HOME}/.local/bin/omarchy-system-sleep-lock"
+[[ -x $sleep_lock ]] || sleep_lock=/usr/bin/omarchy-system-sleep-lock
+if ! timeout 30s "$sleep_lock" 25000 >/dev/null 2>&1; then
+  logger -t omarchy-system-lid-close "sleep-lock did not secure; retrying"
+  request_lock
+  deadline=$((SECONDS + 25))
+  while (( SECONDS < deadline )); do
+    if lock_secure; then
+      break
+    fi
+    request_lock
+    sleep 0.2
+  done
+fi
+
+if ! lock_secure; then
+  logger -t omarchy-system-lid-close "refusing suspend: session not secure"
+  timeout 3s omarchy-notification-send -u critical -g "󰌾" \
+    "Lid close: not locked" \
+    "Suspend skipped because the session lock did not become secure." \
+    >/dev/null 2>&1 || true
+  exit 1
+fi
+
+logger -t omarchy-system-lid-close "secure lock confirmed; suspending"
 exec systemctl suspend

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "cities": [
+    {
+      "id": "home",
+      "label": "Local",
+      "zone": "",
+      "short": "Local"
+    },
+    {
+      "id": "tokyo",
+      "label": "Tokyo",
+      "zone": "Asia/Tokyo",
+      "short": "TYO"
+    },
+    {
+      "id": "cape-town",
+      "label": "Cape Town",
+      "zone": "Africa/Johannesburg",
+      "short": "CPT"
+    },
+    {
+      "id": "panama",
+      "label": "Panama City",
+      "zone": "America/Panama",
+      "short": "PTY"
+    },
+    {
+      "id": "la",
+      "label": "Los Angeles",
+      "zone": "America/Los_Angeles",
+      "short": "LAX"
+    }
+  ]
+}
