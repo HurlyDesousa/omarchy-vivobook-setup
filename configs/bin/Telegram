@@ -1,0 +1,5 @@
+#!/bin/bash
+# telegram-desktop 7.4.1-2 was built against libjxl 0.12; Arch ARM has 0.13.
+# Compat soname symlinks until telegram-desktop is rebuilt against 0.13.
+export LD_LIBRARY_PATH="${HOME}/.local/lib/telegram-jxl-compat${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec /usr/bin/Telegram "$@"

@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""While DND sound-mute flag exists, mute PipeWire streams tagged as event/notify.
+
+Does not touch continuous media playback (no media.role=event).
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import time
+
+FLAG = os.path.join(
+    os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
+    "omarchy",
+    "toggles",
+    "notification-sounds-muted",
+)
+
+MUTE_ROLES = {"event", "notify", "notification"}
+MUTE_CATEGORIES = {"event", "notify", "notification"}
+
+
+def flag_on() -> bool:
+    return os.path.exists(FLAG)
+
+
+def pw_dump():
+    try:
+        raw = subprocess.check_output(["pw-dump"], text=True, stderr=subprocess.DEVNULL)
+        return json.loads(raw)
+    except Exception:
+        return []
+
+
+def should_mute(props: dict) -> bool:
+    role = str(props.get("media.role") or "").lower()
+    category = str(props.get("media.category") or "").lower()
+    media_name = str(props.get("media.name") or "").lower()
+    app = str(props.get("application.name") or "").lower()
+
+    if role in MUTE_ROLES or category in MUTE_CATEGORIES:
+        return True
+    # libcanberra / themeable event playback often lands here
+    if "canberra" in app or "libcanberra" in app:
+        return True
+    if any(k in media_name for k in ("notification", "message-new", "bell", "dialog-")):
+        return True
+    return False
+
+
+def mute_id(node_id: int) -> None:
+    subprocess.run(
+        ["wpctl", "set-mute", str(node_id), "1"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def pass_once() -> None:
+    for node in pw_dump():
+        if not isinstance(node, dict):
+            continue
+        info = node.get("info") or {}
+        props = info.get("props") or {}
+        if not should_mute(props):
+            continue
+        try:
+            mute_id(int(node["id"]))
+        except Exception:
+            continue
+
+
+def main() -> int:
+    # Exit promptly when DND turns off (flag removed).
+    while flag_on():
+        pass_once()
+        time.sleep(0.2)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

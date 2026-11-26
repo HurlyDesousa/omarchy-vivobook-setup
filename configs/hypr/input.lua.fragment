@@ -47,6 +47,12 @@
    },
  })
 
+-- PixArt 093A:3016 also exposes a leftover HID mouse collection. That node
+-- needs two fingers to move and three to click. Keep it off so the real
+-- touchpad is the pointer.
+hl.device({ name = "hid-over-i2c-093a:3016-mouse", enabled = false })
+hl.device({ name = "hid-over-i2c-093a:3016-touchpad", enabled = true })
+
 -- App-specific touchpad scroll speeds.
 -- o.window("(Alacritty|kitty|foot)", { scroll_touchpad = 1.5 })
 -- o.window("com.mitchellh.ghostty", { scroll_touchpad = 0.2 })
@@ -55,6 +61,6 @@
 -- See https://wiki.hypr.land/Configuring/Advanced-and-Cool/Gestures/
 -- hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
 
--- Enable touchpad gestures for moving focus (helpful on scrolling layout).
--- hl.gesture({ fingers = 3, direction = "left", action = function() hl.dispatch(hl.dsp.focus({ direction = "l" })) end })
--- hl.gesture({ fingers = 3, direction = "right", action = function() hl.dispatch(hl.dsp.focus({ direction = "r" })) end })
+-- 3-finger swipe left/right: focus the opposite window (content moves with fingers).
+hl.gesture({ fingers = 3, direction = "left", action = function() hl.dispatch(hl.dsp.focus({ direction = "r" })) end })
+hl.gesture({ fingers = 3, direction = "right", action = function() hl.dispatch(hl.dsp.focus({ direction = "l" })) end })

@@ -344,8 +344,12 @@ Panel {
         try {
           var parsed = JSON.parse(raw)
           root.report = parsed
-          if (!root.hasConfiguredCoordinates)
-            root.label = Model.provisionalCurrentIcon(parsed.current_condition && parsed.current_condition[0], root.label)
+          // Always seed a provisional icon from wttr. With stored coordinates
+          // open-meteo still owns the final day/night glyph, but if that fetch
+          // is slow or drops, leaving label empty made the hero render "—"
+          // next to the temperature (reads as −11°C). provisionalCurrentIcon
+          // keeps an already-resolved open-meteo icon.
+          root.label = Model.provisionalCurrentIcon(parsed.current_condition && parsed.current_condition[0], root.label)
           root.forecastRetries = 0
           if (Model.weatherResponseCompletesSave(root.hasConfiguredCoordinates, "wttr"))
             root.finishSavingLocation()
@@ -536,7 +540,9 @@ Panel {
             textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             anchors.verticalCenterOffset: 5
-            text: root.label || "—"
+            // Prefer the resolved condition glyph; fall back to a cloud rather
+            // than an em dash, which sat next to the temp and looked like −N°C.
+            text: root.label || Model.currentIcon(root.current, "󰖐") || "󰖐"
             color: root.bar.foreground
             font.family: root.bar.fontFamily
             // Decorative condition emoji; intentionally larger than the

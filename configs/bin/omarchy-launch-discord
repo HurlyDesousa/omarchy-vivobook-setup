@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Discord as a Chromium app window, not the default Brave web app.
+# Brave Shields / QUIC in the shared Brave session show Discord's
+# "Temporary Network Error" even when discord.com is reachable.
+#
+# Super+Space must focus the existing window. A second Chromium with the
+# same profile opens extra Discord windows instead of switching workspaces.
+set -euo pipefail
+
+url="${1:-https://discord.com/channels/@me}"
+class="chrome-discord.com__channels_@me-Default"
+profile="${XDG_CONFIG_HOME:-${HOME}/.config}/omarchy/discord-profile"
+mkdir -p "${profile}"
+
+list_addresses() {
+  hyprctl -j clients 2>/dev/null | jq -r --arg c "${class}" \
+    '[.[] | select(.class == $c) | .address] | unique | .[]' || true
+}
+
+focus_window() {
+  local address="$1"
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:${address}\" })" >/dev/null 2>&1 \
+    || hyprctl eval "hl.dsp.focus({ window = \"address:${address}\" })" >/dev/null 2>&1 \
+    || true
+}
+
+close_window() {
+  local address="$1"
+  hyprctl eval "hl.dispatch(\"closewindow\", \"address:${address}\")" >/dev/null 2>&1 \
+    || hyprctl dispatch "hl.dsp.closewindow({ window = \"address:${address}\" })" >/dev/null 2>&1 \
+    || true
+}
+
+focus_existing() {
+  local addresses=() addr
+  while IFS= read -r addr; do
+    [[ -n "${addr}" ]] && addresses+=("${addr}")
+  done < <(list_addresses)
+
+  if ((${#addresses[@]} == 0)); then
+    return 1
+  fi
+  focus_window "${addresses[0]}"
+  for extra in "${addresses[@]:1}"; do
+    close_window "${extra}"
+  done
+  return 0
+}
+
+# Prefer focusing an already-mapped Discord window before taking the lock.
+# Chromium used to inherit the flock fd and hold it forever, so later clicks
+# blocked here and never reached focus.
+if focus_existing; then
+  exit 0
+fi
+
+exec 9>"${profile}/launch.lock"
+if ! flock -n 9; then
+  # Launch in progress (or a stale chromium still holds the lock). Wait briefly
+  # for a window, then focus; never block forever on the lock.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 0.2
+    if focus_existing; then
+      exit 0
+    fi
+  done
+  # Still nothing mapped — fall through without the lock and try to attach to
+  # a running profile process below.
+fi
+
+discord_running() {
+  local pid cmd
+  for pid in $(pgrep -x chromium 2>/dev/null || true); do
+    cmd="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null || true)"
+    [[ "${cmd}" == *"--user-data-dir="*"discord-profile"* ]] || continue
+    [[ "${cmd}" == *"--type="* ]] && continue
+    return 0
+  done
+  return 1
+}
+
+release_lock() {
+  flock -u 9 2>/dev/null || true
+  exec 9>&- 2>/dev/null || true
+}
+
+# Invoke the Chromium binary directly so ~/.config/chromium-flags.conf
+# (Omarchy copy-url / yt-dlp / whatsapp-slim extensions) is not injected into
+# the Discord profile — those have broken Discord loads before.
+chromium_bin="/usr/lib/chromium/chromium"
+if [[ ! -x "${chromium_bin}" ]]; then
+  chromium_bin="/usr/bin/chromium"
+fi
+
+# Profile already running with no mapped window: ask that process for one
+# window. Do not wrap in a new uwsm-app — that spawned extras.
+if discord_running; then
+  release_lock
+  exec "${chromium_bin}" \
+    --user-data-dir="${profile}" \
+    --ozone-platform=wayland \
+    --ozone-platform-hint=wayland \
+    --password-store=gnome-libsecret \
+    --disable-quic \
+    --disable-extensions \
+    --enable-features=WebRtcPipeWireCamera \
+    --app="${url}"
+fi
+
+python3 - "${profile}" <<'PY' >/dev/null 2>&1 || true
+import json, os, sys
+path = os.path.join(sys.argv[1], "Default", "Preferences")
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+except Exception:
+    raise SystemExit(0)
+session = data.setdefault("session", {})
+session["restore_on_startup"] = 5
+profile = data.setdefault("profile", {})
+profile["exited_cleanly"] = True
+profile["exit_type"] = "Normal"
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump(data, f, separators=(",", ":"))
+os.replace(tmp, path)
+PY
+
+# Drop the lock before exec so Chromium does not inherit fd 9 and wedge every
+# future launcher behind flock.
+release_lock
+
+exec setsid uwsm-app -- "${chromium_bin}" \
+  --user-data-dir="${profile}" \
+  --ozone-platform=wayland \
+  --ozone-platform-hint=wayland \
+  --password-store=gnome-libsecret \
+  --disable-quic \
+  --disable-extensions \
+  --enable-features=WebRtcPipeWireCamera \
+  --app="${url}"

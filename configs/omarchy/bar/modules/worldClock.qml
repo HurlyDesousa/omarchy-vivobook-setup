@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
+
 Item {
   id: root
   property var bar: null
@@ -16,8 +17,11 @@ Item {
   property var searchHits: []
   property var storedCities: []
   property bool citiesLoaded: false
-  property string localPlace: ""
-  property string localZone: ""
+  // Temporary: pin the main clock to Tokyo regardless of system/IP location.
+  property string localPlace: "Tokyo"
+  property string localZone: "Asia/Tokyo"
+  readonly property string forcedHomeZone: "Asia/Tokyo"
+  readonly property string forcedHomePlace: "Tokyo"
   property var snapshot: ({
     homeClock: "--:--:--",
     homeDate: "",
@@ -35,7 +39,8 @@ Item {
     { id: "tokyo", label: "Tokyo", zone: "Asia/Tokyo", short: "TYO" },
     { id: "cape-town", label: "Cape Town", zone: "Africa/Johannesburg", short: "CPT" },
     { id: "panama", label: "Panama City", zone: "America/Panama", short: "PTY" },
-    { id: "la", label: "Los Angeles", zone: "America/Los_Angeles", short: "LAX" }
+    { id: "la", label: "Los Angeles", zone: "America/Los_Angeles", short: "LAX" },
+    { id: "cronheim", label: "Cronheim", zone: "Europe/Berlin", short: "CRN" }
   ]
 
   readonly property var cityCatalog: [
@@ -43,6 +48,7 @@ Item {
     { label: "Cape Town", zone: "Africa/Johannesburg", short: "CPT" },
     { label: "Panama City", zone: "America/Panama", short: "PTY" },
     { label: "Los Angeles", zone: "America/Los_Angeles", short: "LAX" },
+    { label: "Cronheim", zone: "Europe/Berlin", short: "CRN" },
     { label: "New York", zone: "America/New_York", short: "NYC" },
     { label: "Chicago", zone: "America/Chicago", short: "CHI" },
     { label: "Denver", zone: "America/Denver", short: "DEN" },
@@ -89,9 +95,18 @@ Item {
     return defaultCities
   }
 
-  readonly property color foreground: bar ? bar.foreground : OmColor.foreground
-  readonly property string fontFamily: bar ? bar.fontFamily : "monospace"
-  readonly property int iconSize: 11
+  readonly property color foreground: {
+    var c = OmColor.bar.text
+    if (bar) {
+      if (bar.barForeground && bar.barForeground.a > 0.05) c = bar.barForeground
+      else if (bar.foreground && bar.foreground.a > 0.05) c = bar.foreground
+    }
+    return c
+  }
+  // FA globe is a filled glyph; a slight darken matches outline icon weight.
+  readonly property color iconForeground: Qt.darker(root.foreground, 1.12)
+  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  readonly property int iconSize: Math.max(10, Math.round(Style.bar.iconFont * 0.9))
   readonly property var cities: snapshot.cities && snapshot.cities.length ? snapshot.cities : []
   readonly property string currentLocationLabel: {
     if (localPlace && localPlace.length) return localPlace
@@ -145,8 +160,8 @@ Item {
     return browseCities
   }
 
-  implicitWidth: (bar && bar.vertical) ? (bar.barSize || 28) : (iconSize + 12)
-  implicitHeight: bar ? bar.barSize : 26
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
 
   function open() { popupOpen = true }
   function close() {
@@ -344,40 +359,19 @@ Item {
     if (!searchProc.running) searchProc.running = true
   }
 
+  function refreshLocalIdentity() {
+    root.localZone = root.forcedHomeZone
+    root.localPlace = root.forcedHomePlace
+  }
+
   Component.onCompleted: {
     mkdirProc.running = true
-    placeProc.running = true
-    zoneProc.running = true
+    refreshLocalIdentity()
   }
 
   Process {
     id: mkdirProc
     command: ["mkdir", "-p", root.stateDir]
-  }
-
-  Process {
-    id: placeProc
-    command: ["curl", "-fsS", "--max-time", "5", "https://wttr.in/?format=%l"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var raw = String(text || "").trim()
-        if (!raw.length) return
-        root.localPlace = raw.split(",")[0].trim()
-      }
-    }
-  }
-
-  Process {
-    id: zoneProc
-    command: ["timedatectl", "show", "-p", "Timezone", "--value"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var raw = String(text || "").trim()
-        if (raw.length) root.localZone = raw
-      }
-    }
   }
 
   FileView {
@@ -397,10 +391,12 @@ Item {
       + "from datetime import datetime\n"
       + "from zoneinfo import ZoneInfo\n"
       + "cities=json.loads(sys.argv[1])\n"
-      + "home=datetime.now().astimezone()\n"
+      + "HOME_ZONE=" + JSON.stringify(root.forcedHomeZone) + "\n"
+      + "home=datetime.now(ZoneInfo(HOME_ZONE))\n"
       + "out=[]\n"
       + "for c in cities:\n"
       + "  z=str(c.get('zone') or '').strip()\n"
+      + "  if c.get('id')=='home': z=HOME_ZONE\n"
       + "  dt=home if not z else home.astimezone(ZoneInfo(z))\n"
       + "  offset=''\n"
       + "  if z:\n"
@@ -509,37 +505,30 @@ Item {
     running: true
     repeat: true
     triggeredOnStart: false
-    onTriggered: {
-      if (!placeProc.running) placeProc.running = true
-    }
+    onTriggered: root.refreshLocalIdentity()
   }
 
   onPopupOpenChanged: {
-    if (popupOpen) root.refresh()
-    else stopEditing()
-  }
-
-  Text {
-    id: icon
-    anchors.centerIn: parent
-    text: "󰖐"
-    color: root.foreground
-    font.family: root.fontFamily
-    font.pixelSize: root.iconSize
-  }
-
-  MouseArea {
-    anchors.fill: parent
-    hoverEnabled: true
-    cursorShape: Qt.PointingHandCursor
-    onEntered: {
-      if (!root.popupOpen && root.bar)
-        root.bar.showTooltip(root, "World clock")
+    if (popupOpen) {
+      root.refreshLocalIdentity()
+      root.refresh()
+    } else {
+      stopEditing()
     }
-    onExited: if (root.bar) root.bar.hideTooltip(root)
-    onClicked: {
-      if (root.bar) root.bar.hideTooltip(root)
-      root.toggle()
+  }
+
+  BarIconButton {
+    id: button
+    anchors.fill: parent
+    bar: root.bar
+    foreground: root.iconForeground
+    // Font Awesome globe in the bar nerd font.
+    text: "\uf0ac"
+    slotSize: Style.bar.statusSlot
+    fontSize: root.iconSize
+    tooltipText: "World clock"
+    onPressed: function(b) {
+      if (b === Qt.LeftButton) root.toggle()
     }
   }
 
@@ -590,13 +579,15 @@ Item {
             Button {
               id: editBtn
               anchors.verticalCenter: parent.verticalCenter
-              text: root.editing ? "Done" : "Edit"
+              // Same cog glyph as Task Manager settings.
+              text: root.editing ? "󰄬" : "󰒓"
+              tooltipText: root.editing ? "Done" : "Edit locations"
               foreground: root.foreground
               fontFamily: root.fontFamily
-              fontSize: Style.font.caption
-              horizontalPadding: Style.space(8)
+              fontSize: Style.font.body
+              horizontalPadding: Style.space(6)
               verticalPadding: Style.space(4)
-              bordered: true
+              bordered: false
               onClicked: root.editing ? root.stopEditing() : root.startEditing()
             }
           }

@@ -1,0 +1,83 @@
+#!/bin/bash
+# Sync desktop "event" notification sounds with Omarchy DND / silence mode.
+# Usage: omarchy-dnd-sync-sounds on|off|sync
+#
+# Apps often play their own pop (libcanberra event sounds, media.role=event).
+# Silencing toasts does not stop that — this helper mutes those paths while DND
+# is on, and restores them when DND turns off. Continuous media (YouTube, etc.)
+# is left alone.
+
+set -euo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy"
+TOGGLE_DIR="$STATE_DIR/toggles"
+SAVE_FILE="$STATE_DIR/dnd-event-sounds.prev"
+FLAG_FILE="$TOGGLE_DIR/notification-sounds-muted"
+SETTINGS_FILE="$STATE_DIR/notifications.json"
+UNIT=omarchy-dnd-mute-event-sounds.service
+
+mkdir -p "$TOGGLE_DIR" "$STATE_DIR"
+
+dnd_from_settings() {
+  python3 - <<'PY' "$SETTINGS_FILE"
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path) as f:
+        data = json.load(f)
+    print("on" if data.get("dnd") is True else "off")
+except Exception:
+    print("off")
+PY
+}
+
+save_event_sounds() {
+  if [[ -f $SAVE_FILE ]]; then
+    return
+  fi
+  local current
+  current=$(gsettings get org.gnome.desktop.sound event-sounds 2>/dev/null || echo "true")
+  printf '%s\n' "$current" >"$SAVE_FILE"
+}
+
+restore_event_sounds() {
+  local previous="true"
+  if [[ -f $SAVE_FILE ]]; then
+    previous=$(cat "$SAVE_FILE")
+    rm -f "$SAVE_FILE"
+  fi
+  case $previous in
+  true|false) gsettings set org.gnome.desktop.sound event-sounds "$previous" 2>/dev/null || true ;;
+  *) gsettings set org.gnome.desktop.sound event-sounds true 2>/dev/null || true ;;
+  esac
+}
+
+mute_event_sounds() {
+  save_event_sounds
+  gsettings set org.gnome.desktop.sound event-sounds false 2>/dev/null || true
+  touch "$FLAG_FILE"
+  systemctl --user start "$UNIT" 2>/dev/null || true
+}
+
+unmute_event_sounds() {
+  rm -f "$FLAG_FILE"
+  systemctl --user stop "$UNIT" 2>/dev/null || true
+  restore_event_sounds
+}
+
+cmd=${1:-sync}
+case $cmd in
+on) mute_event_sounds ;;
+off) unmute_event_sounds ;;
+sync)
+  if [[ $(dnd_from_settings) == on ]]; then
+    mute_event_sounds
+  else
+    unmute_event_sounds
+  fi
+  ;;
+*)
+  echo "Usage: $0 on|off|sync" >&2
+  exit 2
+  ;;
+esac

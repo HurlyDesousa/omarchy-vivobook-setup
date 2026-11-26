@@ -14,6 +14,12 @@
       "short": "TYO"
     },
     {
+      "id": "cronheim",
+      "label": "Cronheim",
+      "zone": "Europe/Berlin",
+      "short": "CRN"
+    },
+    {
       "id": "cape-town",
       "label": "Cape Town",
       "zone": "Africa/Johannesburg",
@@ -30,6 +36,12 @@
       "label": "Los Angeles",
       "zone": "America/Los_Angeles",
       "short": "LAX"
+    },
+    {
+      "id": "auckland",
+      "label": "Auckland",
+      "zone": "Pacific/Auckland",
+      "short": "AKL"
     }
   ]
 }

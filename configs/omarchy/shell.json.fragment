@@ -1,13 +1,13 @@
 {
   "bar": {
-    "centerAnchor": "omarchy.clock",
+    "centerAnchor": "hurly.clock",
     "layout": {
       "center": [
         {
           "id": "hurly.indicators"
         },
         {
-          "id": "omarchy.clock",
+          "id": "hurly.clock",
           "birthYear": 1995,
           "format": "dddd HH:mm",
           "formatAlt": "d MMMM 'W'ww yyyy",
@@ -18,18 +18,18 @@
           "id": "omarchy.keyboard-layout"
         },
         {
-          "id": "hurly.weather",
-          "refreshMinutes": 15
-        },
-        {
-          "id": "sw.art.task-manager"
-        },
-        {
           "id": "omarchy.system-update"
         },
         {
           "id": "worldClock",
           "type": "qml"
+        },
+        {
+          "id": "sw.art.task-manager"
+        },
+        {
+          "id": "hurly.weather",
+          "refreshMinutes": 15
         }
       ],
       "left": [
@@ -97,48 +97,9 @@
   },
   "idle": {
     "lock": 300,
-    "screensaver": 150,
+    "screensaver": 400,
     "screensaverBattery": 150,
     "dim": 180,
     "sleep": 1800
-  },
-  "plugins": [
-    {
-      "id": "hurly.idle"
-    },
-    {
-      "id": "hurly.lock"
-    },
-    {
-      "id": "sw.art.kbd-backlight"
-    },
-    {
-      "id": "io.github.cjgarcia1229.monitor-layout"
-    },
-    {
-      "id": "io.voxtype.settings"
-    },
-    {
-      "id": "hurly.notifications"
-    }
-  ],
-  "version": 1,
-  "omarchy": {
-    "tray": {
-      "hidden": [
-        "Cursor_status_icon_1"
-      ]
-    }
-  },
-  "disabledPlugins": [
-    "omarchy.idle",
-    "omarchy.lock",
-    "omarchy.notifications"
-  ],
-  "cloneSourceRestores": [
-    "hurly.idle",
-    "hurly.lock",
-    "hurly.monitor",
-    "hurly.notifications"
-  ]
+  }
 }
