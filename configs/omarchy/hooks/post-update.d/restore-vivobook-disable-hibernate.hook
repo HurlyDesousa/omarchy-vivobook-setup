@@ -1,0 +1,55 @@
+#!/bin/bash
+# Keep hibernation disabled after Omarchy updates (menu hide + systemd drop-ins).
+# Does not re-delete swap every update; only re-applies policy and menu override.
+set -euo pipefail
+
+for _vb_lib in "/home/hurly/.local/lib/omarchy-vivobook/user-home.sh" \
+               "${OMARCHY_VIVOBOOK_SETUP:+$OMARCHY_VIVOBOOK_SETUP/scripts/lib/user-home.sh}"; do
+  [[ -n "${_vb_lib}" && -f "${_vb_lib}" ]] && { # shellcheck source=/dev/null
+    source "${_vb_lib}"; vivobook_ensure_user_home; break; }
+done
+[[ "${EUID}" -eq 0 && "${HOME}" == "/root" ]] && export HOME="/home/hurly" OMARCHY_HOME="/home/hurly"
+
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
+MENU="${HOME}/.config/omarchy/extensions/omarchy-menu.jsonc"
+mkdir -p "$(dirname "${MENU}")"
+
+if [[ -f "${MENU}" ]]; then
+  python3 - <<'PY' "${MENU}"
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+text = p.read_text()
+entry = '  "system.hibernate": {"when": "false"},\n'
+if '"system.hibernate"' in text and '"when": "false"' in text:
+    raise SystemExit(0)
+insert_at = text.rfind("}")
+if insert_at < 0:
+    raise SystemExit(0)
+p.write_text(text[:insert_at] + entry + text[insert_at:])
+PY
+fi
+
+SLEEP_SRC="${REPO_ROOT}/configs/systemd/system/sleep.conf.d/10-disable-hibernate.conf"
+LOGIN_SRC="${REPO_ROOT}/configs/systemd/system/logind.conf.d/30-disable-hibernate.conf"
+install_dropin() {
+  local src="$1" dest="$2"
+  [[ -f "${src}" ]] || return 0
+  mkdir -p "$(dirname "${dest}")"
+  if [[ -w "$(dirname "${dest}")" ]]; then
+    install -m 0644 "${src}" "${dest}"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo install -m 0644 "${src}" "${dest}" || true
+  fi
+}
+install_dropin "${SLEEP_SRC}" /etc/systemd/sleep.conf.d/10-disable-hibernate.conf
+install_dropin "${LOGIN_SRC}" /etc/systemd/logind.conf.d/30-disable-hibernate.conf
+
+# If resume hook reappears (someone ran hibernation setup), drop it again.
+if [[ -f /etc/mkinitcpio.conf.d/omarchy_resume.conf ]]; then
+  if [[ -w /etc/mkinitcpio.conf.d ]]; then
+    rm -f /etc/mkinitcpio.conf.d/omarchy_resume.conf
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo rm -f /etc/mkinitcpio.conf.d/omarchy_resume.conf || true
+  fi
+fi

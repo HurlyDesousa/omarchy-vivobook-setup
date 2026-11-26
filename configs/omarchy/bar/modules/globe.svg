@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <!-- Simple monochrome globe for bar tinting -->
+  <circle cx="8" cy="8" r="6.25" stroke="#ffffff" stroke-width="1.25"/>
+  <ellipse cx="8" cy="8" rx="2.75" ry="6.25" stroke="#ffffff" stroke-width="1.25"/>
+  <path d="M2.1 6h11.8M2.1 10h11.8" stroke="#ffffff" stroke-width="1.25" stroke-linecap="round"/>
+</svg>

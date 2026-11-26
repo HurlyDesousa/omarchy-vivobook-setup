@@ -1,19 +1,16 @@
 {
   "bar": {
-    "centerAnchor": "omarchy.clock",
+    "centerAnchor": "hurly.clock",
     "layout": {
       "center": [
         {
-          "id": "omarchy.indicators"
+          "id": "hurly.indicators"
         },
         {
-          "id": "sw.art.kbd-backlight"
-        },
-        {
+          "id": "hurly.clock",
           "birthYear": 1995,
           "format": "dddd HH:mm",
           "formatAlt": "d MMMM 'W'ww yyyy",
-          "id": "omarchy.clock",
           "lifeExpectancy": 90,
           "verticalFormat": "HH\n—\nmm"
         },
@@ -21,18 +18,27 @@
           "id": "omarchy.keyboard-layout"
         },
         {
-          "id": "omarchy.weather"
+          "id": "omarchy.system-update"
+        },
+        {
+          "id": "worldClock",
+          "type": "qml"
         },
         {
           "id": "sw.art.task-manager"
         },
         {
-          "id": "omarchy.system-update"
+          "id": "hurly.weather",
+          "refreshMinutes": 15
         }
       ],
       "left": [
         {
           "id": "omarchy.menu"
+        },
+        {
+          "id": "files",
+          "type": "qml"
         },
         {
           "id": "omarchy.workspaces"
@@ -41,13 +47,33 @@
       "right": [
         {
           "id": "omarchy.tray",
-          "pinned": [
-            "Cursor_status_icon_1"
-          ],
+          "pinned": [],
           "hidden": []
         },
         {
-          "id": "omarchy.agents"
+          "id": "hegjon.unifi"
+        },
+        {
+          "id": "io.github.hurlydesousa.kite"
+        },
+        {
+          "id": "hurly.notification-history"
+        },
+        {
+          "id": "sw.art.pi-local"
+        },
+        {
+          "id": "sw.art.grok"
+        },
+        {
+          "id": "io.github.hurlydesousa.ai-usage",
+          "footerTitle": "Pi",
+          "footerDetail": " (local is excluded)",
+          "footerLabel": "Qwen 2.5 · 3B",
+          "spaceXaiLabel": "Grok 4.6 · 1.5T · Composer 2.5 · 1T"
+        },
+        {
+          "id": "sw.art.autostart"
         },
         {
           "id": "omarchy.bluetooth"
@@ -59,13 +85,10 @@
           "id": "omarchy.audio"
         },
         {
-          "id": "omarchy.monitor"
+          "id": "hurly.monitor"
         },
         {
-          "id": "omarchy.power"
-        },
-        {
-          "id": "sw.art.autostart"
+          "id": "hurly.power"
         }
       ]
     },
@@ -75,8 +98,8 @@
   "idle": {
     "lock": 300,
     "screensaver": 400,
-    "dim": 180
-  },
-  "plugins": [],
-  "version": 1
+    "screensaverBattery": 150,
+    "dim": 180,
+    "sleep": 1800
+  }
 }

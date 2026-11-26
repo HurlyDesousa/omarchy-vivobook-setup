@@ -1,0 +1,14 @@
+[Unit]
+Description=Suspend Omarchy when the laptop lid closes
+After=graphical-session.target dbus.socket
+Requires=dbus.socket
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/omarchy-lid-sleep-watch
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

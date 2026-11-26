@@ -12,6 +12,18 @@ done
 REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-${HOME}/src/omarchy-vivobook-setup}"
 OVERLAY="${REPO_ROOT}/configs/omarchy/overlays/panels/power"
 TARGET="/usr/share/omarchy/shell/plugins/panels/power"
+PLUGIN_SRC="${REPO_ROOT}/configs/omarchy/plugins/hurly.power"
+PLUGIN_DEST="${HOME}/.config/omarchy/plugins/hurly.power"
+
+# Keep the live hurly.power clone's watt helper in sync (singleton read-draw).
+if [[ -d "${PLUGIN_SRC}" ]]; then
+  mkdir -p "${PLUGIN_DEST}"
+  for f in read-draw manifest.json; do
+    [[ -f "${PLUGIN_SRC}/${f}" ]] || continue
+    install -m 0755 "${PLUGIN_SRC}/${f}" "${PLUGIN_DEST}/${f}"
+    [[ "${f}" == "manifest.json" ]] && chmod 0644 "${PLUGIN_DEST}/${f}" || true
+  done
+fi
 
 [[ -d "${OVERLAY}" ]] || exit 0
 

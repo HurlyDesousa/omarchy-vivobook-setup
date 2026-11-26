@@ -1,0 +1,66 @@
+-- Learn how to configure Hyprland: https://wiki.hypr.land/Configuring/Start/
+
+-- Omarchy's bootstrap keeps path setup out of this user config.
+dofile((os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/default/hypr/bootstrap.lua")
+
+-- Disable all Omarchy default bindings. Add your own in hypr/bindings.lua.
+-- omarchy_default_bindings = false
+--
+-- Or disable only bindings for Omarchy's preinstalled apps/web apps while
+-- keeping core window-manager bindings:
+-- omarchy_preinstalled_bindings = false
+
+-- Load Omarchy defaults.
+require("default.hypr.omarchy")
+
+-- Put your personal overrides in these files. They're loaded after Omarchy's
+-- defaults so package updates can improve the defaults without rewriting your
+-- ~/.config/hypr files.
+require("hypr.monitors")
+require("hypr.input")
+require("hypr.bindings")
+require("hypr.looknfeel")
+require("hypr.autostart")
+
+-- Fullscreen screensaver (stock Omarchy rules).
+o.window("org.omarchy.screensaver", { fullscreen = true })
+o.window("org.omarchy.screensaver", { float = true })
+o.window("org.omarchy.screensaver", { animation = "slide" })
+
+-- Chromium / Opera / Chrome PWAs (Discord, YouTube, …): stop Hyprland from
+-- auto-switching the panel into HDR on fullscreen. That path washes colors on
+-- this HDR-capable OLED; global cm_auto_hdr=0 was worse for the whole desktop.
+o.window(
+  "((google-)?[cC]hrom(e|ium)|[bB]rave-browser|[mM]icrosoft-edge|Vivaldi-stable|helium|[oO]pera)",
+  { no_auto_hdr = true }
+)
+o.window("^chrome-.+", { no_auto_hdr = true })
+
+-- Toggle config flags dynamically.
+require("default.hypr.toggles")
+
+-- Add any other personal Hyprland configuration below.
+-- o.window("qemu", { workspace = "5" })
+
+-- Prefer ~/.local/bin so the colourful screensaver wrapper wins over the
+-- packaged /usr/bin/omarchy-screensaver when Hyprland execs the terminal.
+do
+  local home = os.getenv("HOME") or ""
+  local local_bin = home .. "/.local/bin"
+  local omarchy_bin = (os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/bin"
+  local path = os.getenv("PATH") or "/usr/bin"
+  local seen = {}
+  local kept = {}
+  local function add(dir)
+    if dir ~= "" and not seen[dir] then
+      seen[dir] = true
+      kept[#kept + 1] = dir
+    end
+  end
+  add(local_bin)
+  add(omarchy_bin)
+  for entry in path:gmatch("[^:]+") do
+    add(entry)
+  end
+  hl.env("PATH", table.concat(kept, ":"))
+end

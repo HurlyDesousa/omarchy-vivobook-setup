@@ -1,0 +1,36 @@
+#!/bin/bash
+# omarchy-lid-sleep-watch v1 — suspend when logind reports the lid closed.
+#
+# logind logs "Lid closed" on this machine; Hyprland's stock "Lid Switch"
+# bind does not run (the input device is named gpio-keys). Poll LidClosed
+# and invoke the lid-close handler on a closed edge.
+
+set -euo pipefail
+
+lid_closed() {
+  local v
+  v=$(timeout 1s busctl get-property org.freedesktop.login1 \
+    /org/freedesktop/login1 org.freedesktop.login1.Manager LidClosed \
+    2>/dev/null || echo 'b false')
+  [[ $v == *true* ]]
+}
+
+was_closed=0
+if lid_closed; then
+  was_closed=1
+fi
+
+logger -t omarchy-lid-sleep-watch "watching logind LidClosed (was_closed=${was_closed})"
+
+while true; do
+  sleep 0.25
+  if lid_closed; then
+    if (( was_closed == 0 )); then
+      was_closed=1
+      logger -t omarchy-lid-sleep-watch "lid closed, calling lid-close handler"
+      "${HOME}/.local/bin/omarchy-system-lid-close" || true
+    fi
+  else
+    was_closed=0
+  fi
+done

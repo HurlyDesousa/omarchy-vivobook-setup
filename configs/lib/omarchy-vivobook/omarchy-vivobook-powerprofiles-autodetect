@@ -1,24 +1,37 @@
 #!/bin/bash
 # Called on boot (via omarchy-powerprofiles-init) and on AC plug/unplug (udev).
+# Runs as root. Must only exec root-owned helpers under /usr/local/lib|/usr/local/bin.
+# systemd often starts this with no HOME; never dereference unbound HOME under set -u.
 set -euo pipefail
 
-VIVOBOOK_LIB="${OMARCHY_VIVOBOOK_LIB:-${HOME}/.local/lib/omarchy-vivobook}"
-if [[ -f "${VIVOBOOK_LIB}/user-home.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "${VIVOBOOK_LIB}/user-home.sh"
-  vivobook_ensure_user_home
-elif [[ -f /usr/local/lib/omarchy-vivobook/user-home.sh ]]; then
-  # shellcheck source=/dev/null
-  source /usr/local/lib/omarchy-vivobook/user-home.sh
-  vivobook_ensure_user_home
-elif [[ "${EUID}" -eq 0 ]]; then
+SYS_LIB=/usr/local/lib/omarchy-vivobook
+DEFAULT_HOME=/home/hurly
+
+if [[ "${EUID}" -eq 0 ]]; then
   if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
     HOME="$(getent passwd "${SUDO_USER}" 2>/dev/null | cut -d: -f6 || true)"
   fi
-  HOME="${HOME:-/home/hurly}"
+  : "${HOME:=${DEFAULT_HOME}}"
   export HOME OMARCHY_HOME="${HOME}"
+else
+  : "${HOME:=${DEFAULT_HOME}}"
+  export HOME
+  if [[ -f "${HOME}/.local/lib/omarchy-vivobook/user-home.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "${HOME}/.local/lib/omarchy-vivobook/user-home.sh"
+    vivobook_ensure_user_home
+  elif [[ -f "${SYS_LIB}/user-home.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "${SYS_LIB}/user-home.sh"
+    vivobook_ensure_user_home
+  fi
 fi
 
-export PATH=/usr/share/omarchy/bin:/usr/bin:/usr/local/bin:${PATH}
 export OMARCHY_POWERPROFILES_STATE_DIR="${HOME}/.local/state/omarchy/powerprofiles"
-exec /usr/share/omarchy/bin/omarchy-powerprofiles-set autodetect
+
+SET="${SYS_LIB}/omarchy-powerprofiles-set"
+if [[ ! -x "${SET}" ]]; then
+  echo "omarchy-vivobook-powerprofiles-autodetect: missing ${SET}" >&2
+  exit 1
+fi
+exec "${SET}" autodetect

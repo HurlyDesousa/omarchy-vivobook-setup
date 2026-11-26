@@ -1,0 +1,79 @@
+#!/bin/bash
+# Tear down Omarchy hibernation and keep it disabled on this Vivobook.
+# Hibernation freezes/locks up this machine; suspend is kept.
+set -euo pipefail
+
+ts=$(date +%Y%m%d%H%M%S)
+SWAP_SUBVOLUME="/swap"
+SWAP_FILE="$SWAP_SUBVOLUME/swapfile"
+MKINITCPIO_CONF="/etc/mkinitcpio.conf.d/omarchy_resume.conf"
+RESUME_DROP_IN="/etc/limine-entry-tool.d/resume.conf"
+
+if [[ ${EUID} -ne 0 ]]; then
+  exec sudo "$0" "$@"
+fi
+
+if swapon --show | grep -q "$SWAP_FILE"; then
+  swapoff "$SWAP_FILE"
+fi
+
+if [[ -f $SWAP_FILE ]]; then
+  rm -f "$SWAP_FILE"
+fi
+if btrfs subvolume show "$SWAP_SUBVOLUME" &>/dev/null; then
+  btrfs subvolume delete "$SWAP_SUBVOLUME" || true
+fi
+
+if grep -Fq "$SWAP_FILE" /etc/fstab; then
+  cp -a /etc/fstab "/etc/fstab.${ts}.back"
+  sed -i "\|$SWAP_FILE|d" /etc/fstab
+  sed -i '/^# Btrfs swapfile for system hibernation$/d' /etc/fstab
+fi
+
+rm -f "$MKINITCPIO_CONF"
+if [[ -f $RESUME_DROP_IN ]]; then
+  cp -a "$RESUME_DROP_IN" "${RESUME_DROP_IN}.${ts}.back"
+  rm -f "$RESUME_DROP_IN"
+fi
+
+mkdir -p /etc/systemd/sleep.conf.d /etc/systemd/logind.conf.d
+REPO_ROOT="${OMARCHY_VIVOBOOK_SETUP:-/home/hurly/src/omarchy-vivobook-setup}"
+if [[ -f ${REPO_ROOT}/configs/systemd/system/sleep.conf.d/10-disable-hibernate.conf ]]; then
+  install -m 0644 "${REPO_ROOT}/configs/systemd/system/sleep.conf.d/10-disable-hibernate.conf" \
+    /etc/systemd/sleep.conf.d/10-disable-hibernate.conf
+else
+  cat >/etc/systemd/sleep.conf.d/10-disable-hibernate.conf <<'CONF'
+# Vivobook: hibernation freezes this machine. Keep suspend only.
+[Sleep]
+AllowHibernation=no
+AllowHybridSleep=no
+AllowSuspendThenHibernate=no
+CONF
+fi
+
+if [[ -f ${REPO_ROOT}/configs/systemd/system/logind.conf.d/30-disable-hibernate.conf ]]; then
+  install -m 0644 "${REPO_ROOT}/configs/systemd/system/logind.conf.d/30-disable-hibernate.conf" \
+    /etc/systemd/logind.conf.d/30-disable-hibernate.conf
+else
+  cat >/etc/systemd/logind.conf.d/30-disable-hibernate.conf <<'CONF'
+# Vivobook: never hibernate from keys or sleep policy.
+[Login]
+HandleHibernateKey=ignore
+HandleHibernateKeyLongPress=ignore
+HandleSuspendKeyLongPress=ignore
+SleepOperation=suspend
+CONF
+fi
+
+systemctl mask --now hibernate.target hybrid-sleep.target suspend-then-hibernate.target \
+  systemd-hibernate.service systemd-hybrid-sleep.service systemd-suspend-then-hibernate.service \
+  2>/dev/null || true
+
+systemctl daemon-reload
+systemctl reload systemd-logind || true
+
+if command -v limine-mkinitcpio >/dev/null; then
+  limine-mkinitcpio
+fi
+
+echo "Hibernation disabled"

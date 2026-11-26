@@ -228,11 +228,27 @@ main() {
   else
     warn "No configs/omarchy/plugins/ yet — TODO: INVENTORY"
   fi
+
+  # Custom bar QML modules (Files launcher, world clock, …)
+  if [[ -d "${CONFIGS_DIR}/omarchy/bar/modules" ]]; then
+    mkdir -p "${HOME}/.config/omarchy/bar/modules"
+    for mod in "${CONFIGS_DIR}"/omarchy/bar/modules/*.qml; do
+      [[ -f "${mod}" ]] || continue
+      base="$(basename "${mod}")"
+      dest="${HOME}/.config/omarchy/bar/modules/${base}"
+      cp -a "${mod}" "${dest}"
+      ok "Installed bar module: ${base}"
+    done
+  fi
   echo
 
   # 5. State directories
   info "=== State directories ==="
   ensure_state_dir "${HOME}/.local/state/omarchy/task-manager"
+  seed_if_absent \
+    "${CONFIGS_DIR}/state/world-clock.json.default" \
+    "${HOME}/.local/state/omarchy/world-clock.json" \
+    "world-clock cities"
 
   # kbd-backlight state is a single JSON *file* written by KbdBacklight.qml
   # (~/.local/state/omarchy/kbd-backlight). Never create a directory at that path.
